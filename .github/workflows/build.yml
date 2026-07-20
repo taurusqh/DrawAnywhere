@@ -26,18 +26,29 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Decode keystore from secrets
+      - name: Prepare keystore and signing env
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            # Use real keystore from secrets
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEYSTORE_KEY_PASSWORD=${{ secrets.KEYSTORE_KEY_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+          else
+            # Generate temporary keystore
+            keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
+              -keyalg RSA -keysize 2048 -validity 3650 \
+              -storepass temppass -keypass temppass \
+              -dname "CN=DrawAnywhere, OU=Dev, O=taurusqh, L=Unknown, ST=Unknown, C=CN"
+            echo "KEYSTORE_PASSWORD=***" >> $GITHUB_ENV
+            echo "KEYSTORE_KEY_PASSWORD=***" >> $GITHUB_ENV
+            echo "KEY_ALIAS=drawanywhere" >> $GITHUB_ENV
+          fi
 
       - name: Build release APK
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -63,9 +74,8 @@ jobs:
           body: |
             ✨ DrawAnywhere v1.0.3
 
-            - 新增安装权限处理（Android 8.0+）
-            - 添加 REQUEST_INSTALL_PACKAGES 权限
-            - 安装前自动弹窗引导用户授权
-            - 使用正式签名文件构建
+            - 修复安装权限问题：新增 REQUEST_INSTALL_PACKAGES 权限
+            - 安装 APK 前自动弹窗引导用户授权
+            - 修复编译错误（添加缺失的权限对话框方法）
           files: app-release.apk
           fail_on_unmatched_files: false
