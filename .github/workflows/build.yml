@@ -26,21 +26,18 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Setup keystore
+      - name: Decode keystore from secrets
         run: |
-          keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
-            -keyalg RSA -keysize 2048 -validity 3650 \
-            -storepass temppass -keypass temppass \
-            -dname "CN=DrawAnywhere, OU=Dev, O=taurusqh, L=Unknown, ST=Unknown, C=CN"
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
 
-      - name: Build APK
+      - name: Build release APK
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease
         env:
-          KEYSTORE_PASSWORD: temppass
-          KEYSTORE_KEY_PASSWORD: temppass
-          KEY_ALIAS: drawanywhere
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -61,11 +58,14 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.2
-          name: v1.0.2
+          tag_name: v1.0.3
+          name: v1.0.3
           body: |
-            ## ✨ DrawAnywhere v1.0.2
-            - 版本更新
-            - 自动构建 CI 配置
+            ✨ DrawAnywhere v1.0.3
+
+            - 新增安装权限处理（Android 8.0+）
+            - 添加 REQUEST_INSTALL_PACKAGES 权限
+            - 安装前自动弹窗引导用户授权
+            - 使用正式签名文件构建
           files: app-release.apk
           fail_on_unmatched_files: false

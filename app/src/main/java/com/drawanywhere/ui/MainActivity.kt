@@ -219,6 +219,64 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ===== 悬浮窗权限 =====
+
+    private fun requestOverlayPermission() {
+        // 检测联想 ZUI 系统
+        if (isZui()) {
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.overlay_permission_zui_title))
+                .setMessage(getString(R.string.overlay_permission_zui_msg))
+                .setPositiveButton(getString(R.string.btn_settings)) { _, _ ->
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    intent.data = Uri.parse("package:$packageName")
+                    startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
+                }
+                .setNegativeButton(getString(R.string.btn_cancel)) { _, _ ->
+                    Toast.makeText(this, "需要悬浮窗权限才能使用", Toast.LENGTH_LONG).show()
+                }
+                .setCancelable(true)
+                .show()
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.overlay_permission_title))
+                .setMessage(getString(R.string.overlay_permission_msg))
+                .setPositiveButton(getString(R.string.btn_grant)) { _, _ ->
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+                    startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
+                }
+                .setNegativeButton(getString(R.string.btn_cancel)) { _, _ ->
+                    Toast.makeText(this, "需要悬浮窗权限才能使用", Toast.LENGTH_LONG).show()
+                }
+                .setCancelable(true)
+                .show()
+        }
+    }
+
+    private fun requestBatteryOptimization() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        if (!isZui()) return
+        val pm = getSystemService(android.os.PowerManager::class.java)
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.battery_opt_title))
+            .setMessage(getString(R.string.battery_opt_msg))
+            .setPositiveButton("前往设置") { _, _ ->
+                val intent = Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName")
+                )
+                startActivityForResult(intent, REQUEST_BATTERY_OPT)
+            }
+            .setNegativeButton("稍后", null)
+            .setCancelable(true)
+            .show()
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_OVERLAY_PERMISSION) {
