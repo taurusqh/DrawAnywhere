@@ -26,29 +26,21 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Prepare keystore and signing env
+      - name: Generate temporary keystore
         run: |
-          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
-            # Use real keystore from secrets
-            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
-            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-            echo "KEYSTORE_KEY_PASSWORD=${{ secrets.KEYSTORE_KEY_PASSWORD }}" >> $GITHUB_ENV
-            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
-          else
-            # Generate temporary keystore
-            keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
-              -keyalg RSA -keysize 2048 -validity 3650 \
-              -storepass temppass -keypass temppass \
-              -dname "CN=DrawAnywhere, OU=Dev, O=taurusqh, L=Unknown, ST=Unknown, C=CN"
-            echo "KEYSTORE_PASSWORD=***" >> $GITHUB_ENV
-            echo "KEYSTORE_KEY_PASSWORD=***" >> $GITHUB_ENV
-            echo "KEY_ALIAS=drawanywhere" >> $GITHUB_ENV
-          fi
+          keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
+            -keyalg RSA -keysize 2048 -validity 3650 \
+            -storepass temppass -keypass temppass \
+            -dname "CN=DrawAnywhere, OU=Dev, O=taurusqh, L=Unknown, ST=Unknown, C=CN"
 
       - name: Build release APK
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease
+        env:
+          KEYSTORE_PASSWORD: temppass
+          KEYSTORE_KEY_PASSWORD: temppass
+          KEY_ALIAS: drawanywhere
 
       - uses: actions/upload-artifact@v4
         with:
