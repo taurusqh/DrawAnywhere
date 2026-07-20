@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DrawAnywhere 平板原型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    gap: 30px;
+    padding: 20px;
+    flex-wrap: wrap;
+  }
+
+  /* ===== 设备切换标签 ===== */
+  .device-tabs {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .device-tabs button {
+    padding: 10px 24px;
+    border-radius: 20px;
+    border: 1px solid #444;
+    background: transparent;
+    color: #888;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .device-tabs button.active {
+    background: #667eea;
+    color: #fff;
+    border-color: #667eea;
+  }
+  .device-tabs button:hover { border-color: #888; }
+
+  /* ===== 平板容器 ===== */
+  .tab {
+    background: #000;
+    border-radius: 28px;
+    padding: 16px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6), 0 0 0 2px #333;
+    position: relative;
+    flex-shrink: 0;
+    transition: all 0.4s ease;
+  }
+  .tab.portrait {
+    width: 650px;
+    height: 500px;
+    /* 用宽高比模拟横屏平板视觉效果 */
+  }
+  .tab.landscape {
+    width: 800px;
+    height: 470px;
+  }
+  .tab-screen {
+    width: 100%;
+    height: 100%;
+    border-radius: 14px;
+    background: #fff;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ===== 底部 App 内容 ===== */
+  .app-content {
+    width: 100%;
+    height: 100%;
+    padding: 28px 32px;
+    background: #f5f5f5;
+    overflow-y: auto;
+  }
+  .app-content h2 {
+    font-size: 18px;
+    color: #333;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e0e0e0;
+  }
+  .app-content .question {
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-bottom: 18px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  .app-content .question h3 {
+    font-size: 15px;
+    color: #666;
+    margin-bottom: 10px;
+  }
+  .app-content .question p {
+    font-size: 17px;
+    color: #222;
+    line-height: 1.8;
+    font-family: 'Times New Roman', serif;
+  }
+  .app-content .answer-area {
+    background: #fff;
+    border-radius: 14px;
+    padding: 20px 24px;
+    min-height: 100px;
+    border: 1px dashed #ddd;
+    color: #ccc;
+    font-size: 15px;
+  }
+
+  /* ===== 半透明覆盖层 ===== */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: rgba(255,255,255,0.08);
+  }
+  .overlay.drawing-mode { pointer-events: auto; }
+
+  /* ===== 涂鸦示例（红/黄/蓝） ===== */
+  .doodle {
+    position: absolute;
+    pointer-events: none;
+  }
+  .doodle-circle {
+    left: 100px; top: 160px;
+    width: 70px; height: 70px;
+    border: 4px solid #FF3B30;
+    border-radius: 50%;
+  }
+  .doodle-underline {
+    left: 60px; top: 340px;
+    width: 280px;
+    border-bottom: 4px solid #0A84FF;
+  }
+  .doodle-arrow {
+    left: 300px; top: 320px;
+    font-size: 28px;
+    color: #FF3B30;
+    transform: rotate(-30deg);
+  }
+  .doodle-arrow::after { content: '→'; }
+  .doodle-line {
+    left: 240px; top: 210px;
+    width: 100px;
+    border-bottom: 4px solid #FFD60A;
+    transform: rotate(50deg);
+  }
+  .doodle-text {
+    left: 360px; top: 330px;
+    font-size: 16px;
+    color: #FF3B30;
+    font-weight: bold;
+  }
+  .doodle-text::after { content: '= 0?'; }
+  .doodle-rect {
+    left: 220px; top: 240px;
+    width: 60px; height: 50px;
+    border: 4px solid #0A84FF;
+  }
+
+  /* ===== 悬浮按钮 ===== */
+  .floating-btn {
+    position: absolute;
+    top: 30px;
+    right: 8px;
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    box-shadow: 0 4px 20px rgba(102,126,234,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 100;
+    transition: transform 0.2s;
+  }
+  .floating-btn:hover { transform: scale(1.08); }
+  .floating-btn svg { width: 28px; height: 28px; fill: #fff; }
+
+  /* ===== 工具栏（半透明超薄） ===== */
+  .toolbar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(24,24,32,0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 16px 16px 0 0;
+    padding: 8px 16px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 50;
+    display: none;
+  }
+  .toolbar.show {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .toolbar-section {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .toolbar-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(255,255,255,0.08);
+    margin: 0 8px;
+    flex-shrink: 0;
+  }
+
+  /* 工具按钮 - 超薄工具栏适配 */
+  .tool-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: none;
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.55);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .tool-btn:hover { background: rgba(255,255,255,0.12); }
+  .tool-btn.active {
+    background: rgba(102,126,234,0.25);
+    color: #fff;
+    box-shadow: 0 0 0 1.5px rgba(102,126,234,0.5);
+  }
+  .tool-btn.icon-sm { font-size: 14px; width: 32px; height: 32px; }
+
+  /* 颜色按钮 */
+  .color-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .color-btn.active { border-color: #fff; transform: scale(1.1); box-shadow: 0 0 8px rgba(255,255,255,0.12); }
+  .color-btn:hover { transform: scale(1.06); }
+
+  /* 粗细按钮 */
+  .stroke-btn {
+    width: 32px; height: 32px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .stroke-btn:hover { background: rgba(255,255,255,0.06); }
+  .stroke-btn .stroke-dot {
+    border-radius: 50%;
+    background: rgba(255,255,255,0.4);
+    transition: all 0.15s;
+  }
+  .stroke-btn .stroke-dot.s { width: 3px; height: 3px; }
+  .stroke-btn .stroke-dot.m { width: 7px; height: 7px; }
+  .stroke-btn .stroke-dot.l { width: 12px; height: 12px; }
+  .stroke-btn .stroke-dot.active { background: #fff; }
+
+  /* 模式切换按钮 */
+  .mode-btn {
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .mode-btn:hover { background: rgba(255,255,255,0.1); }
+  .mode-btn .mode-indicator {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+  .mode-btn .mode-indicator.draw { background: #34c759; box-shadow: 0 0 4px rgba(52,199,89,0.4); }
+  .mode-btn .mode-indicator.penetrate { background: rgba(255,255,255,0.2); }
+
+  /* ===== 顶部模式标签 ===== */
+  .mode-badge {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(12px);
+    border-radius: 20px;
+    padding: 5px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 60;
+  }
+  .mode-badge .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+  .mode-badge .dot.green { background: #34c759; }
+  .mode-badge .dot.gray { background: rgba(255,255,255,0.25); }
+  .mode-badge span {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* ===== 说明区 ===== */
+  .legend {
+    max-width: 360px;
+    color: #ccc;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .legend h3 { color: #fff; margin-bottom: 12px; font-size: 16px; }
+  .legend ul { padding-left: 18px; }
+  .legend li { margin-bottom: 7px; }
+  .legend .demo-controls { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .demo-btn {
+    padding: 11px 22px;
+    border-radius: 12px;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    background: #667eea;
+    color: #fff;
+    transition: all 0.2s;
+  }
+  .demo-btn:hover { background: #5a6fd6; transform: translateY(-1px); }
+  .demo-btn.outline { background: transparent; border: 1px solid rgba(255,255,255,0.15); }
+
+  .screen-label {
+    color: rgba(255,255,255,0.25);
+    font-size: 12px;
+    text-align: center;
+    margin-top: 8px;
+    letter-spacing: 1px;
+  }
+
+  /* ===== 平板横屏下工具栏紧湊左/右布局====== */
+  /* empty, keep same structure */
+</style>
+</head>
+<body>
+
+<div class="device-tabs">
+  <button class="active" data-orient="landscape">🔄 横屏 (1280×800)</button>
+  <button data-orient="portrait">📱 竖屏 (800×1280)</button>
+</div>
+
+<div class="tab landscape" id="tabDevice">
+  <div class="tab-screen" id="tabScreen">
+
+    <!-- 底层内容 -->
+    <div class="app-content">
+      <h2>📐 数学练习 · 二次函数</h2>
+      <div class="question">
+        <h3>已知二次函数 f(x) = x² - 4x + 3</h3>
+        <p>
+          (1) 求 f(x) 的顶点坐标<br>
+          (2) 求 f(x) 与 x 轴的交点坐标<br>
+          (3) 画出 f(x) 的大致图像
+        </p>
+      </div>
+      <div class="question">
+        <h3>解方程</h3>
+        <p>3(x - 1)² - 12 = 0</p>
+      </div>
+      <div class="answer-area">
+        点击右上角悬浮按钮，在屏幕上写画...
+      </div>
+    </div>
+
+    <!-- 覆盖层 -->
+    <div class="overlay drawing-mode" id="overlay">
+      <div class="doodle doodle-circle"></div>
+      <div class="doodle doodle-underline"></div>
+      <div class="doodle doodle-arrow"></div>
+      <div class="doodle doodle-line"></div>
+      <div class="doodle doodle-rect"></div>
+      <div class="doodle doodle-text"></div>
+
+      <!-- 模式标签 -->
+      <div class="mode-badge" id="modeBadge">
+        <span class="dot green" id="modeDot"></span>
+        <span id="modeText">绘图模式</span>
+        <span style="color:rgba(255,255,255,0.25);font-size:10px;">▼</span>
+      </div>
+
+      <!-- 工具栏 -->
+      <div class="toolbar show" id="toolbar">
+
+        <!-- 绘图工具 -->
+        <div class="toolbar-section">
+          <button class="tool-btn active" data-tool="pen" title="画笔">✏️</button>
+          <button class="tool-btn" data-tool="eraser" title="橡皮擦">🧹</button>
+          <button class="tool-btn" data-tool="line" title="直线">╱</button>
+          <button class="tool-btn" data-tool="rect" title="矩形">▭</button>
+          <button class="tool-btn" data-tool="circle" title="圆形">○</button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- 操作 -->
+        <div class="toolbar-section">
+          <button class="tool-btn icon-sm" title="撤销">↩</button>
+          <button class="tool-btn icon-sm" title="清屏">🗑</button>
+          <button class="tool-btn icon-sm" title="保存">💾</button>
+          <button class="tool-btn icon-sm" title="关闭" id="closeCanvas">✕</button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- 颜色 -->
+        <div class="toolbar-section">
+          <button class="color-btn active" data-color="#FF3B30" style="background:#FF3B30" title="红"></button>
+          <button class="color-btn" data-color="#FFD60A" style="background:#FFD60A" title="黄"></button>
+          <button class="color-btn" data-color="#0A84FF" style="background:#0A84FF" title="蓝"></button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- 粗细 -->
+        <div class="toolbar-section">
+          <button class="stroke-btn" data-width="2"><div class="stroke-dot s active"></div></button>
+          <button class="stroke-btn" data-width="5"><div class="stroke-dot m"></div></button>
+          <button class="stroke-btn" data-width="10"><div class="stroke-dot l"></div></button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <!-- 模式切换 -->
+        <div class="toolbar-section">
+          <button class="mode-btn" id="modeToggle">
+            <span class="mode-indicator draw" id="modeIndicator"></span>
+            <span id="modeToggleText">穿透模式</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 悬浮按钮 -->
+    <div class="floating-btn" id="floatBtn" title="切换画板">
+      <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+    </div>
+
+  </div>
+</div>
+
+<div>
+  <div class="screen-label" id="orientLabel">横屏 1280 × 800</div>
+
+  <div class="legend">
+    <h3>📐 平板 UI 说明</h3>
+    <ul>
+      <li><strong>📌 悬浮按钮</strong>（右上）— 可拖拽移动，点击切换画板显隐</li>
+      <li><strong>🛠 底部工具栏</strong> — 毛玻璃背景，横竖屏通用布局</li>
+      <li style="margin-left:18px;">✏️ 画笔 · 🧹 橡皮 · ╱ 直线 · ▭ 矩形 · ○ 圆形</li>
+      <li style="margin-left:18px;">↩ 撤销 · 🗑 清屏 · 💾 保存 · ✕ 关闭画板</li>
+      <li style="margin-left:18px;">🔴 红 · 🟡 黄 · 🔵 蓝 三色预设 · 三档粗细</li>
+      <li><strong>🔄 绘图/穿透切换</strong> — 工具栏右边/顶部标签均可切换</li>
+      <li><strong>💡 平板适配要点</strong></li>
+      <li style="margin-left:18px;">按钮 48×48px，触摸目标 ≥44dp（手指友好）</li>
+      <li style="margin-left:18px;">工具栏横排展开，充分利用横向空间</li>
+      <li style="margin-left:18px;">颜色圈和按钮间距充裕，减少误触</li>
+    </ul>
+
+    <div class="demo-controls">
+      <button class="demo-btn" id="toggleOverlayDemo">👁 切换画板</button>
+      <button class="demo-btn outline" id="toggleModeDemo">🔄 切换绘图/穿透</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const overlay = document.getElementById('overlay');
+  const modeDot = document.getElementById('modeDot');
+  const modeText = document.getElementById('modeText');
+  const modeToggleText = document.getElementById('modeToggleText');
+  const modeIndicator = document.getElementById('modeIndicator');
+
+  function setMode(mode) {
+    if (mode === 'draw') {
+      overlay.classList.add('drawing-mode');
+      modeDot.className = 'dot green';
+      modeText.textContent = '绘图模式';
+      modeToggleText.textContent = '穿透模式';
+      modeIndicator.className = 'mode-indicator draw';
+    } else {
+      overlay.classList.remove('drawing-mode');
+      modeDot.className = 'dot gray';
+      modeText.textContent = '穿透模式';
+      modeToggleText.textContent = '绘图模式';
+      modeIndicator.className = 'mode-indicator penetrate';
+    }
+  }
+
+  // 工具高亮
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+  document.querySelectorAll('.color-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+  document.querySelectorAll('.stroke-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.stroke-btn .stroke-dot').forEach(b => b.classList.remove('active'));
+      this.querySelector('.stroke-dot').classList.add('active');
+    });
+  });
+
+  // 画板显隐
+  function toggleToolbar() {
+    const tb = document.getElementById('toolbar');
+    tb.classList.toggle('show');
+    document.getElementById('toggleOverlayDemo').textContent = tb.classList.contains('show') ? '👁 隐藏画板' : '👁 显示画板';
+  }
+  document.getElementById('toggleOverlayDemo').addEventListener('click', toggleToolbar);
+  document.getElementById('floatBtn').addEventListener('click', toggleToolbar);
+  document.getElementById('closeCanvas').addEventListener('click', toggleToolbar);
+
+  // 模式切换
+  document.getElementById('toggleModeDemo').addEventListener('click', function() {
+    const isDraw = overlay.classList.contains('drawing-mode');
+    setMode(isDraw ? 'penetrate' : 'draw');
+  });
+  document.getElementById('modeToggle').addEventListener('click', function() {
+    const isDraw = overlay.classList.contains('drawing-mode');
+    setMode(isDraw ? 'penetrate' : 'draw');
+  });
+  document.getElementById('modeBadge').addEventListener('click', function() {
+    const isDraw = overlay.classList.contains('drawing-mode');
+    setMode(isDraw ? 'penetrate' : 'draw');
+  });
+
+  // 横竖屏切换
+  document.querySelectorAll('.device-tabs button').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.device-tabs button').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      const orient = this.dataset.orient;
+      const tab = document.getElementById('tabDevice');
+      tab.className = 'tab ' + orient;
+      document.getElementById('orientLabel').textContent =
+        orient === 'landscape' ? '横屏 1280 × 800' : '竖屏 800 × 1280';
+
+      // 文字示意也变一下
+      const bg = document.querySelector('.app-content h2');
+      if (orient === 'landscape') {
+        bg.textContent = '📐 数学练习 · 二次函数';
+      } else {
+        bg.textContent = '📐 数学练习';
+      }
+    });
+  });
+</script>
+</body>
+</html>

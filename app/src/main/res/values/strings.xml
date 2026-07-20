@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DrawAnywhere</string>
+    <string name="channel_overlay">画板服务</string>
+    <string name="channel_overlay_desc">悬浮画板前台服务</string>
+    <string name="notification_text">点击切换模式</string>
+    <string name="mode_draw">绘图模式</string>
+    <string name="mode_penetrate">穿透模式</string>
+    <string name="action_toggle_mode">切换模式</string>
+    <string name="action_close">关闭</string>
+    <string name="action_save">保存</string>
+    <string name="overlay_permission_title">需要悬浮窗权限</string>
+    <string name="overlay_permission_msg">DrawAnywhere 需要悬浮窗权限才能在其他应用上层显示画板</string>
+    <string name="btn_grant">授予权限</string>
+    <string name="btn_cancel">取消</string>
+    <string name="overlay_permission_zui_title">📌 联想 ZUI 手动授权指引</string>
+    <string name="overlay_permission_zui_msg">DrawAnywhere 需要悬浮窗权限才能在其他应用上层显示画板。
+
+请按以下步骤操作：
+
+1. 打开「设置」→「应用管理」
+2. 找到「DrawAnywhere」
+3. 点击「其他权限」
+4. 打开「悬浮窗」开关
+
+设置完成后返回本应用即可。</string>
+    <string name="btn_settings">打开设置</string>
+    <string name="battery_opt_title">🔋 允许后台运行</string>
+    <string name="battery_opt_msg">为防止 DrawAnywhere 被系统清理，建议将省电策略设为「无限制」。
+
+是否前往设置？</string>
+    <string name="save_fallback_path">已保存到应用目录</string>
+    <string name="action_exit">退出应用</string>
+    <string name="notification_running">DrawAnywhere 正在运行</string>
+</resources>

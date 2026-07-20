@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="red">#FFFF3B30</color>
+    <color name="yellow">#FFFFD60A</color>
+    <color name="blue">#FF0A84FF</color>
+    <color name="toolbar_bg">#A6181824</color>
+    <color name="toolbar_btn">#8FFFFFFF</color>
+    <color name="toolbar_btn_active">#FFFFFFFF</color>
+    <color name="toolbar_btn_bg">#18FFFFFF</color>
+    <color name="toolbar_btn_bg_active">#40667EEA</color>
+    <color name="canvas_transparent">#00000000</color>
+</resources>
