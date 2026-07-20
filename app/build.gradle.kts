@@ -20,6 +20,30 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("release.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+                ?: findProperty("KEYSTORE_PASSWORD") as String?
+            keyPassword = System.getenv("KEYSTORE_KEY_PASSWORD")
+                ?: findProperty("KEYSTORE_KEY_PASSWORD") as String?
+            keyAlias = System.getenv("KEY_ALIAS")
+                ?: findProperty("KEY_ALIAS") as String?
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

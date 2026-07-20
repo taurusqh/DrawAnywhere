@@ -53,6 +53,12 @@ class MainActivity : AppCompatActivity() {
 
     // ===== 检查更新 =====
 
+    /** 更新信息 */
+    private data class UpdateInfo(
+        val tag: String,
+        val apkUrl: String?
+    )
+
     fun onCheckUpdateClicked(view: android.view.View) {
         val button = view as Button
         button.isEnabled = false
@@ -67,22 +73,22 @@ class MainActivity : AppCompatActivity() {
                     result == null -> {
                         Toast.makeText(this, R.string.check_update_failed, Toast.LENGTH_SHORT).show()
                     }
-                    result.second == "no_release" -> {
+                    result.tag == "no_release" -> {
                         Toast.makeText(this, R.string.already_latest, Toast.LENGTH_SHORT).show()
                     }
-                    result.first == BuildConfig.VERSION_NAME -> {
+                    result.tag == BuildConfig.VERSION_NAME -> {
                         Toast.makeText(this, R.string.already_latest, Toast.LENGTH_SHORT).show()
                     }
                     else -> {
-                        showUpdateDialog(result.first, result.second)
+                        showUpdateDialog(result)
                     }
                 }
             }
         }
     }
 
-    /** 调用 GitHub API 获取最新 release，返回 (tag, html_url) 或 null */
-    private fun checkLatestVersion(): Pair<String, String>? {
+    /** 调用 GitHub API 获取最新 release，返回更新信息或 null */
+    private fun checkLatestVersion(): UpdateInfo? {
         return try {
             val url = URL(GITHUB_API)
             val conn = url.openConnection() as HttpURLConnection
@@ -90,34 +96,114 @@ class MainActivity : AppCompatActivity() {
             conn.readTimeout = 8000
             conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
             val code = conn.responseCode
-            if (code == 404) {
-                // 还没有任何 Release，视为已最新（不返回 null，返回特殊标记）
-                return Pair("0", "no_release")
-            }
+            if (code == 404) return UpdateInfo("no_release", null)
             if (code != 200) return null
             val body = conn.inputStream.bufferedReader().readText()
             val json = JSONObject(body)
             val tag = json.getString("tag_name").removePrefix("v")
-            val htmlUrl = json.getString("html_url")
-            Pair(tag, htmlUrl)
+            // 从 assets 中找到 APK 文件
+            val assets = json.optJSONArray("assets")
+            var apkUrl: String? = null
+            if (assets != null) {
+                for (i in 0 until assets.length()) {
+                    val asset = assets.getJSONObject(i)
+                    val name = asset.getString("name")
+                    if (name.endsWith(".apk")) {
+                        apkUrl = asset.getString("browser_download_url")
+                        break
+                    }
+                }
+            }
+            UpdateInfo(tag, apkUrl)
         } catch (_: Exception) {
             null
         }
     }
 
     /** 显示发现新版本对话框 */
-    private fun showUpdateDialog(latestTag: String, downloadUrl: String) {
+    private fun showUpdateDialog(info: UpdateInfo) {
         val currentVer = BuildConfig.VERSION_NAME
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.update_available_title))
-            .setMessage(getString(R.string.update_available_msg, latestTag, currentVer))
+            .setMessage(getString(R.string.update_available_msg, info.tag, currentVer))
             .setPositiveButton(getString(R.string.btn_download)) { _, _ ->
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
-                startActivity(intent)
+                if (info.apkUrl != null) {
+                    downloadAndInstall(info.apkUrl)
+                } else {
+                    // 没有 APK 附件，跳转 Release 页面
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/taurusqh/DrawAnywhere/releases/tag/v${info.tag}"))
+                    startActivity(intent)
+                }
             }
             .setNegativeButton(getString(R.string.btn_cancel), null)
             .setCancelable(true)
             .show()
+    }
+
+    /** 下载 APK 并调用系统安装器 */
+    private fun downloadAndInstall(apkUrl: String) {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.downloading_update))
+            .setMessage("正在下载 v${BuildConfig.VERSION_NAME} 更新…")
+            .setCancelable(false)
+            .show()
+
+        thread {
+            try {
+                val url = URL(apkUrl)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 10000
+                conn.readTimeout = 30000
+                conn.connect()
+
+                // 保存到应用专属目录
+                val dir = java.io.File(getExternalFilesDir(null), "Update")
+                dir.mkdirs()
+                val apkFile = java.io.File(dir, "DrawAnywhere-v${BuildConfig.VERSION_NAME}.apk")
+                // 删除旧的下载文件
+                if (apkFile.exists()) apkFile.delete()
+
+                val input = conn.inputStream
+                val output = java.io.FileOutputStream(apkFile)
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                }
+                output.close()
+                input.close()
+
+                runOnUiThread {
+                    dialog.dismiss()
+                    installApk(apkFile)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    dialog.dismiss()
+                    Toast.makeText(this, R.string.download_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    /** 调用系统安装器安装 APK */
+    private fun installApk(file: java.io.File) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+            Toast.makeText(this, "下载完成，请安装", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "安装失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // ===== 悬浮窗权限 =====
