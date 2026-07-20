@@ -36,7 +36,6 @@ class MainActivity : AppCompatActivity() {
         versionText = findViewById(R.id.versionText)
         versionText.text = "v${BuildConfig.VERSION_NAME}"
 
-        // 如果已有权限则直接启动服务
         if (Settings.canDrawOverlays(this)) {
             startOverlayService()
             requestBatteryOptimization()
@@ -45,7 +44,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 每次回到前台检查权限
         if (!Settings.canDrawOverlays(this)) {
             requestOverlayPermission()
         }
@@ -53,7 +51,6 @@ class MainActivity : AppCompatActivity() {
 
     // ===== 检查更新 =====
 
-    /** 更新信息 */
     private data class UpdateInfo(
         val tag: String,
         val apkUrl: String?
@@ -87,7 +84,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 调用 GitHub API 获取最新 release，返回更新信息或 null */
     private fun checkLatestVersion(): UpdateInfo? {
         return try {
             val url = URL(GITHUB_API)
@@ -101,7 +97,6 @@ class MainActivity : AppCompatActivity() {
             val body = conn.inputStream.bufferedReader().readText()
             val json = JSONObject(body)
             val tag = json.getString("tag_name").removePrefix("v")
-            // 从 assets 中找到 APK 文件
             val assets = json.optJSONArray("assets")
             var apkUrl: String? = null
             if (assets != null) {
@@ -120,7 +115,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 显示发现新版本对话框 */
     private fun showUpdateDialog(info: UpdateInfo) {
         val currentVer = BuildConfig.VERSION_NAME
         AlertDialog.Builder(this)
@@ -130,7 +124,6 @@ class MainActivity : AppCompatActivity() {
                 if (info.apkUrl != null) {
                     downloadAndInstall(info.apkUrl)
                 } else {
-                    // 没有 APK 附件，跳转 Release 页面
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/taurusqh/DrawAnywhere/releases/tag/v${info.tag}"))
                     startActivity(intent)
                 }
@@ -140,7 +133,6 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /** 下载 APK 并调用系统安装器 */
     private fun downloadAndInstall(apkUrl: String) {
         val dialog = AlertDialog.Builder(this)
             .setTitle(getString(R.string.downloading_update))
@@ -156,11 +148,9 @@ class MainActivity : AppCompatActivity() {
                 conn.readTimeout = 30000
                 conn.connect()
 
-                // 保存到应用专属目录
                 val dir = java.io.File(getExternalFilesDir(null), "Update")
                 dir.mkdirs()
                 val apkFile = java.io.File(dir, "DrawAnywhere-v${BuildConfig.VERSION_NAME}.apk")
-                // 删除旧的下载文件
                 if (apkFile.exists()) apkFile.delete()
 
                 val input = conn.inputStream
@@ -186,8 +176,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 调用系统安装器安装 APK */
     private fun installApk(file: java.io.File) {
+        // Android 8.0+ 需要检查是否有安装未知来源应用的权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !canInstallPackages()) {
+            AlertDialog.Builder(this)
+                .setTitle("需要安装权限")
+                .setMessage("需要在设置中允许安装未知来源应用，才能安装此更新。\n\n是否前往设置？")
+                .setPositiveButton("去设置") { _, _ ->
+                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                    intent.data = Uri.parse("package:$packageName")
+                    startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
+                }
+                .setNegativeButton("取消", null)
+                .setCancelable(false)
+                .show()
+            return
+        }
+
         try {
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 this,
@@ -206,68 +211,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ===== 悬浮窗权限 =====
-
-    private fun requestOverlayPermission() {
-        // 检测联想 ZUI 系统
-        if (isZui()) {
-            AlertDialog.Builder(this)
-                .setTitle(getString(R.string.overlay_permission_zui_title))
-                .setMessage(getString(R.string.overlay_permission_zui_msg))
-                .setPositiveButton(getString(R.string.btn_settings)) { _, _ ->
-                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                    intent.data = Uri.parse("package:$packageName")
-                    startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
-                }
-                .setNegativeButton(getString(R.string.btn_cancel)) { _, _ ->
-                    Toast.makeText(this, "需要悬浮窗权限才能使用", Toast.LENGTH_LONG).show()
-                }
-                .setCancelable(true)
-                .show()
+    private fun canInstallPackages(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            packageManager.canRequestPackageInstalls()
         } else {
-            AlertDialog.Builder(this)
-                .setTitle(getString(R.string.overlay_permission_title))
-                .setMessage(getString(R.string.overlay_permission_msg))
-                .setPositiveButton(getString(R.string.btn_grant)) { _, _ ->
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName")
-                    )
-                    startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
-                }
-                .setNegativeButton(getString(R.string.btn_cancel)) { _, _ ->
-                    Toast.makeText(this, "需要悬浮窗权限才能使用", Toast.LENGTH_LONG).show()
-                }
-                .setCancelable(true)
-                .show()
+            true
         }
-    }
-
-    private fun requestBatteryOptimization() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        if (!isZui()) return
-        val pm = getSystemService(android.os.PowerManager::class.java)
-        if (pm.isIgnoringBatteryOptimizations(packageName)) return
-
-        AlertDialog.Builder(this)
-            .setTitle(getString(R.string.battery_opt_title))
-            .setMessage(getString(R.string.battery_opt_msg))
-            .setPositiveButton("前往设置") { _, _ ->
-                val intent = Intent(
-                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                    Uri.parse("package:$packageName")
-                )
-                startActivityForResult(intent, REQUEST_BATTERY_OPT)
-            }
-            .setNegativeButton("稍后", null)
-            .setCancelable(true)
-            .show()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQUEST_OVERLAY_PERMISSION) {
-            if (Settings.canDrawOverlays(this)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && canInstallPackages()) {
+                Toast.makeText(this, "已授权，可以安装", Toast.LENGTH_SHORT).show()
+            } else if (Settings.canDrawOverlays(this)) {
                 startOverlayService()
                 requestBatteryOptimization()
                 Toast.makeText(this, "权限已授予，悬浮按钮已显示", Toast.LENGTH_SHORT).show()
