@@ -22,5 +22,9 @@ Thumbs.db
 hs_err_pid*.log
 replay_pid*.log
 
+# Signing
+*.jks
+*.keystore
+
 # Kotlin
 .kotlin/
