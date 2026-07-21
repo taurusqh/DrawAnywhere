@@ -89,7 +89,9 @@ jobs:
       - name: Rename APK with version
         run: |
           VERSION=${{ steps.bump_version.outputs.version }}
-          cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/DrawAnywhere-v${VERSION}-release.apk
+          # 先删除旧的带版本号的文件
+          rm -f app/build/outputs/apk/release/DrawAnywhere-v*.apk
+          cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/DrawAnywhere-v${VERSION}.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -117,7 +119,8 @@ jobs:
         run: |
           # 从 APK 文件名提取版本号
           APK_FILE=$(ls ./apk/DrawAnywhere-v*.apk | head -1)
-          VERSION=$(basename "$APK_FILE" .apk | sed -E 's/DrawAnywhere-v//')
+          BASENAME=$(basename "$APK_FILE" .apk)
+          VERSION=${BASENAME#DrawAnywhere-v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - uses: softprops/action-gh-release@v2
