@@ -71,6 +71,7 @@ class ToolPaletteView(
         addToolButton(DrawTool.RECT)
         addToolButton(DrawTool.CIRCLE)
         addToolButton(DrawTool.DASHED_LINE)
+        addToolButton(DrawTool.WAVE_LINE)
         addDivider()
 
         // === 操作 ===
@@ -231,6 +232,22 @@ class ToolPaletteView(
                 p.pathEffect = DashPathEffect(floatArrayOf(dp(6).toFloat(), dp(5).toFloat()), 0f)
                 c.drawLine(cx - h, cy, cx + h, cy, p)
                 p.pathEffect = null
+            }
+            DrawTool.WAVE_LINE -> {
+                p.strokeWidth = dp(3f).toFloat()
+                p.style = Paint.Style.STROKE
+                p.color = Color.WHITE
+                val wl = h * 0.7f
+                val amp = h * 0.25f
+                val path = Path()
+                path.moveTo(cx - wl, cy)
+                for (i in 1..12) {
+                    val frac = i / 12.0f
+                    val px = cx - wl + frac * 2 * wl
+                    val py = cy + amp * kotlin.math.sin(frac * 2 * kotlin.math.PI * 2)
+                    path.lineTo(px, py)
+                }
+                c.drawPath(path, p)
             }
         }
 

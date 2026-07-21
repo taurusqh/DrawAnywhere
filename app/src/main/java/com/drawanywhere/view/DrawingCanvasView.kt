@@ -68,10 +68,34 @@ class DrawingCanvasView(
 
         when (stroke.tool) {
             DrawTool.PEN, DrawTool.ERASER -> drawPath(canvas, stroke.points)
-            DrawTool.LINE, DrawTool.RECT, DrawTool.CIRCLE, DrawTool.DASHED_LINE -> drawShape(canvas, stroke.points, stroke.tool)
+            DrawTool.LINE, DrawTool.RECT, DrawTool.CIRCLE, DrawTool.DASHED_LINE, DrawTool.WAVE_LINE -> drawShape(canvas, stroke.points, stroke.tool)
         }
 
         paint.pathEffect = null
+    }
+
+    private fun drawWaveLine(canvas: Canvas, start: DrawingPoint, end: DrawingPoint) {
+        val dx = end.x - start.x
+        val dy = end.y - start.y
+        val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+        if (distance < 1f) return
+        val density = resources.displayMetrics.density
+        val wavelength = 50f * density
+        val amplitude = 15f * density
+        val steps = (distance / wavelength).toInt().coerceAtLeast(1) + 2
+        val path = Path()
+        path.moveTo(start.x, start.y)
+        for (i in 1..steps) {
+            val frac = i.toFloat() / steps.toFloat()
+            val x = start.x + dx * frac
+            val y = start.y + dy * frac
+            val waveY = amplitude * kotlin.math.sin(frac * 2 * kotlin.math.PI * (distance / wavelength))
+            // 垂直于线条方向的偏移
+            val perpX = -dy / distance
+            val perpY = dx / distance
+            path.lineTo(x + perpX * waveY, y + perpY * waveY)
+        }
+        canvas.drawPath(path, paint)
     }
 
     private fun drawPath(canvas: Canvas, points: List<DrawingPoint>) {
@@ -91,6 +115,7 @@ class DrawingCanvasView(
 
         when (tool) {
             DrawTool.LINE, DrawTool.DASHED_LINE -> canvas.drawLine(start.x, start.y, end.x, end.y, paint)
+            DrawTool.WAVE_LINE -> drawWaveLine(canvas, start, end)
             DrawTool.RECT -> {
                 val left = minOf(start.x, end.x)
                 val top = minOf(start.y, end.y)
@@ -134,7 +159,7 @@ class DrawingCanvasView(
                     drawPath(canvas, currentPoints)
                 }
             }
-            DrawTool.LINE, DrawTool.RECT, DrawTool.CIRCLE, DrawTool.DASHED_LINE -> {
+            DrawTool.LINE, DrawTool.RECT, DrawTool.CIRCLE, DrawTool.DASHED_LINE, DrawTool.WAVE_LINE -> {
                 val start = currentStartPoint ?: return
                 val end = previewEndPoint ?: return
                 drawShape(canvas, listOf(start, end), tool)
@@ -189,7 +214,7 @@ class DrawingCanvasView(
                         finishStroke()
                     }
                     // 形状工具
-                    DrawTool.LINE, DrawTool.RECT, DrawTool.CIRCLE, DrawTool.DASHED_LINE -> {
+                    DrawTool.LINE, DrawTool.RECT, DrawTool.CIRCLE, DrawTool.DASHED_LINE, DrawTool.WAVE_LINE -> {
                         previewEndPoint = DrawingPoint(x, y)
                         finishShapeStroke()
                     }

@@ -133,7 +133,7 @@ class MainActivity : AppCompatActivity() {
             .setMessage("$message\n\n🔗 下载页面：\n${GITHUB_RELEASES_URL}")
             .setPositiveButton(getString(R.string.btn_download)) { _, _ ->
                 if (info.apkUrl != null) {
-                    downloadAndInstall(info.apkUrl)
+                    downloadAndInstall(info)
                 } else {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse("$GITHUB_RELEASES_URL/tag/v${info.tag}"))
                     startActivity(intent)
@@ -148,16 +148,16 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun downloadAndInstall(apkUrl: String) {
+    private fun downloadAndInstall(info: UpdateInfo) {
         val dialog = AlertDialog.Builder(this)
             .setTitle(getString(R.string.downloading_update))
-            .setMessage("正在下载 v${BuildConfig.VERSION_NAME} 更新…")
+            .setMessage("正在下载 v${info.tag} 更新…")
             .setCancelable(false)
             .show()
 
         thread {
             try {
-                val url = URL(apkUrl)
+                val url = URL(info.apkUrl)
                 val conn = url.openConnection() as HttpURLConnection
                 conn.connectTimeout = 10000
                 conn.readTimeout = 30000
@@ -165,7 +165,7 @@ class MainActivity : AppCompatActivity() {
 
                 val dir = java.io.File(getExternalFilesDir(null), "Update")
                 dir.mkdirs()
-                val apkFile = java.io.File(dir, "DrawAnywhere-v${BuildConfig.VERSION_NAME}.apk")
+                val apkFile = java.io.File(dir, "DrawAnywhere-v${info.tag}.apk")
                 if (apkFile.exists()) apkFile.delete()
 
                 val input = conn.inputStream

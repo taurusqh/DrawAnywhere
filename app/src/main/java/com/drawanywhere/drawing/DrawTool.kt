@@ -6,5 +6,6 @@ enum class DrawTool {
     LINE,
     RECT,
     CIRCLE,
-    DASHED_LINE
+    DASHED_LINE,
+    WAVE_LINE
 }
