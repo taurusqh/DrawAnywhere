@@ -32,20 +32,31 @@ jobs:
           VERSION=$(grep 'versionName = "' app/build.gradle.kts | head -1 | sed -E 's/.*"([0-9.]+)".*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Restore keystore from secret (if configured)
+      # 固定签名（从 GitHub Secrets 解码），确保所有版本同签名，可覆盖安装
+      - name: Decode keystore from secrets
+        id: keystore
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > app/release.jks
-            echo "Keystore restored from secret"
+          if [ -n "$KEYSTORE_B64" ]; then
+            mkdir -p app
+            echo "$KEYSTORE_B64" | base64 -d > app/release.jks
+            chmod 600 app/release.jks
+            echo "keystore_source=secret" >> $GITHUB_OUTPUT
+            echo "✅ Keystore decoded from secret"
           else
-            keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
-              -keyalg RSA -keysize 2048 -validity 3650 \
-              -storepass temppass -keypass temppass \
-              -dname "CN=DrawAnywhere, OU=Dev, O=taurusqh, L=Unknown, ST=Unknown, C=CN"
-            echo "Temporary keystore generated (no KEYSTORE_BASE64 secret set)"
+            echo "keystore_source=temp" >> $GITHUB_OUTPUT
+            echo "⚠️  No keystore secret, will use temp"
           fi
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+
+      # 降级：secrets 不存在时生成临时 keystore
+      - name: Generate temporary keystore
+        if: steps.keystore.outputs.keystore_source == 'temp'
+        run: |
+          keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
+            -keyalg RSA -keysize 2048 -validity 3650 \
+            -storepass temppass -keypass temppass \
+            -dname "CN=DrawAnywhere, OU=Dev, O=taurusqh, L=Unknown, ST=Unknown, C=CN"
 
       - name: Build release APK
         run: |
@@ -53,7 +64,7 @@ jobs:
           ./gradlew assembleRelease
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'temppass' }}
-          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD || 'temppass' }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'temppass' }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'drawanywhere' }}
 
       - name: Rename APK with version
