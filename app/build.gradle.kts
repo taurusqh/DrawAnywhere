@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.drawanywhere"
+    namespace = "drawanywhere"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.drawanywhere"
+        applicationId = "drawanywhere"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.7"
     }
 
     buildFeatures {
