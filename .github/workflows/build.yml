@@ -26,11 +26,30 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Get version name
-        id: version
+      # ===== 自动递增版本号 =====
+      - name: Auto increment version
+        id: bump_version
         run: |
-          VERSION=$(grep 'versionName = "' app/build.gradle.kts | head -1 | sed -E 's/.*"([0-9.]+)".*/\1/')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          FILE="app/build.gradle.kts"
+          # 读取当前 versionCode 和 versionName
+          VERSION_CODE=$(grep 'versionCode = ' "$FILE" | head -1 | sed -E 's/.*=\s*([0-9]+)/\1/')
+          VERSION_NAME=$(grep 'versionName = "' "$FILE" | head -1 | sed -E 's/.*"([0-9.]+)".*/\1/')
+
+          echo "Current: v$VERSION_NAME (code=$VERSION_CODE)"
+
+          # versionCode 每次 +1
+          NEW_CODE=$((VERSION_CODE + 1))
+
+          # versionName 从 versionCode 派生：1.0.x（x = versionCode）
+          NEW_NAME="1.0.${NEW_CODE}"
+
+          # 写回 build.gradle.kts
+          sed -i "s/versionCode = ${VERSION_CODE}/versionCode = ${NEW_CODE}/" "$FILE"
+          sed -i "s/versionName = \"${VERSION_NAME}\"/versionName = \"${NEW_NAME}\"/" "$FILE"
+
+          echo "New: v${NEW_NAME} (code=${NEW_CODE})"
+          echo "version=$NEW_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$NEW_CODE" >> $GITHUB_OUTPUT
 
       # 固定签名（从 GitHub Secrets 解码），确保所有版本同签名，可覆盖安装
       - name: Decode keystore from secrets
@@ -69,7 +88,7 @@ jobs:
 
       - name: Rename APK with version
         run: |
-          VERSION=${{ steps.version.outputs.version }}
+          VERSION=${{ steps.bump_version.outputs.version }}
           cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/DrawAnywhere-v${VERSION}-release.apk
 
       - name: Upload APK artifact
@@ -93,10 +112,12 @@ jobs:
           name: apk
           path: ./apk
 
-      - name: Get version name
+      - name: Get version from artifact filename
         id: version
         run: |
-          VERSION=$(grep 'versionName = "' app/build.gradle.kts | head -1 | sed -E 's/.*"([0-9.]+)".*/\1/')
+          # 从 APK 文件名提取版本号
+          APK_FILE=$(ls ./apk/DrawAnywhere-v*.apk | head -1)
+          VERSION=$(basename "$APK_FILE" .apk | sed -E 's/DrawAnywhere-v//')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - uses: softprops/action-gh-release@v2
@@ -106,14 +127,12 @@ jobs:
           body: |
             ✨ DrawAnywhere v${{ steps.version.outputs.version }}
 
-            ### 新增
-            - 升级包页面 URL 显示，支持点击打开浏览器下载
-
             ### 修复
             - 修复 ZUI 设备上撤销操作崩溃问题（深拷贝 Stroke 对象避免共享引用）
             - 修复撤销/重做栈数据一致性问题
 
             ### 其他
+            - 升级包页面 URL 显示，支持点击打开浏览器下载
             - 构建产物只包含 APK 文件，文件名包含版本号
           files: ./apk/*.apk
           fail_on_unmatched_files: false
