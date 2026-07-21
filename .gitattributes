@@ -1,0 +1,6 @@
+# 排除核心源码，使自动生成的 release 归档仅含构建脚本
+app/src/             export-ignore
+prototype/           export-ignore
+
+# Git 默认行尾处理
+* text=auto
