@@ -48,11 +48,16 @@ jobs:
           KEYSTORE_KEY_PASSWORD: temppass
           KEY_ALIAS: drawanywhere
 
+      - name: Rename APK with version
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/DrawAnywhere-v${VERSION}-release.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: apk
-          path: app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/release/DrawAnywhere-v*.apk
 
   release:
     if: github.event_name == 'workflow_dispatch' && inputs.upload_release
