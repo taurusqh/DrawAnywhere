@@ -89,7 +89,7 @@ class DrawingCanvasView(
             val frac = i.toFloat() / steps.toFloat()
             val x = start.x + dx * frac
             val y = start.y + dy * frac
-            val waveY = amplitude * kotlin.math.sin(frac * 2 * kotlin.math.PI * (distance / wavelength))
+            val waveY = amplitude * kotlin.math.sin(frac * 2 * kotlin.math.PI.toFloat() * (distance / wavelength))
             // 垂直于线条方向的偏移
             val perpX = -dy / distance
             val perpY = dx / distance

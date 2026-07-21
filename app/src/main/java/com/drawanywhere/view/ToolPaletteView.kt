@@ -7,6 +7,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.widget.*
+import kotlin.math.PI
 import com.drawanywhere.R
 import com.drawanywhere.drawing.DrawingEngine
 import com.drawanywhere.drawing.DrawTool
@@ -244,7 +245,7 @@ class ToolPaletteView(
                 for (i in 1..12) {
                     val frac = i / 12.0f
                     val px = cx - wl + frac * 2 * wl
-                    val py = cy + amp * kotlin.math.sin(frac * 2 * kotlin.math.PI * 2)
+                    val py = cy + amp * kotlin.math.sin(frac * 2 * PI.toFloat() * 2)
                     path.lineTo(px, py)
                 }
                 c.drawPath(path, p)
