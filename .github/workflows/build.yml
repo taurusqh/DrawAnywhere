@@ -26,6 +26,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Get version name
+        id: version
+        run: |
+          VERSION=$(grep 'versionName' app/build.gradle.kts | sed -E 's/.*"([0-9.]+)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Generate temporary keystore
         run: |
           keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
@@ -42,10 +48,11 @@ jobs:
           KEYSTORE_KEY_PASSWORD: temppass
           KEY_ALIAS: drawanywhere
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          name: apk
+          path: app/build/outputs/apk/release/*.apk
 
   release:
     if: github.event_name == 'workflow_dispatch' && inputs.upload_release
@@ -55,19 +62,34 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
-          name: app-release-apk
+          name: apk
+          path: ./apk
+
+      - name: Get version name
+        id: version
+        run: |
+          VERSION=$(grep 'versionName' app/build.gradle.kts | sed -E 's/.*"([0-9.]+)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.3
-          name: v1.0.3
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
           body: |
-            ✨ DrawAnywhere v1.0.3
+            ✨ DrawAnywhere v${{ steps.version.outputs.version }}
 
-            - 修复安装权限问题：新增 REQUEST_INSTALL_PACKAGES 权限
-            - 安装 APK 前自动弹窗引导用户授权
-            - 修复编译错误（添加缺失的权限对话框方法）
-          files: app-release.apk
+            ### 新增
+            - 升级包页面 URL 显示，支持点击打开浏览器下载
+
+            ### 修复
+            - 修复 ZUI 设备上撤销操作崩溃问题（深拷贝 Stroke 对象避免共享引用）
+            - 修复撤销/重做栈数据一致性问题
+
+            ### 其他
+            - 构建产物只包含 APK 文件，文件名包含版本号
+          files: ./apk/*.apk
           fail_on_unmatched_files: false

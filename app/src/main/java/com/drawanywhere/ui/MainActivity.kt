@@ -24,10 +24,12 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val REQUEST_OVERLAY_PERMISSION = 1001
         private const val REQUEST_BATTERY_OPT = 1002
+        private const val GITHUB_RELEASES_URL = "https://github.com/taurusqh/DrawAnywhere/releases"
         private const val GITHUB_API = "https://api.github.com/repos/taurusqh/DrawAnywhere/releases/latest"
     }
 
     private lateinit var versionText: TextView
+    private lateinit var upgradeLinkText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,6 +37,13 @@ class MainActivity : AppCompatActivity() {
 
         versionText = findViewById(R.id.versionText)
         versionText.text = "v${BuildConfig.VERSION_NAME}"
+
+        // 升级包链接
+        upgradeLinkText = findViewById(R.id.upgradeLinkText)
+        upgradeLinkText.setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_RELEASES_URL))
+            startActivity(intent)
+        }
 
         if (Settings.canDrawOverlays(this)) {
             startOverlayService()
@@ -117,16 +126,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun showUpdateDialog(info: UpdateInfo) {
         val currentVer = BuildConfig.VERSION_NAME
+        val message = getString(R.string.update_available_msg, info.tag, currentVer)
+
         AlertDialog.Builder(this)
             .setTitle(getString(R.string.update_available_title))
-            .setMessage(getString(R.string.update_available_msg, info.tag, currentVer))
+            .setMessage("$message\n\n🔗 下载页面：\n${GITHUB_RELEASES_URL}")
             .setPositiveButton(getString(R.string.btn_download)) { _, _ ->
                 if (info.apkUrl != null) {
                     downloadAndInstall(info.apkUrl)
                 } else {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/taurusqh/DrawAnywhere/releases/tag/v${info.tag}"))
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("$GITHUB_RELEASES_URL/tag/v${info.tag}"))
                     startActivity(intent)
                 }
+            }
+            .setNeutralButton("打开浏览器") { _, _ ->
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_RELEASES_URL))
+                startActivity(intent)
             }
             .setNegativeButton(getString(R.string.btn_cancel), null)
             .setCancelable(true)
@@ -205,9 +220,8 @@ class MainActivity : AppCompatActivity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
-            Toast.makeText(this, "下载完成，请安装", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Toast.makeText(this, "安装失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "无法启动安装：${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -222,7 +236,6 @@ class MainActivity : AppCompatActivity() {
     // ===== 悬浮窗权限 =====
 
     private fun requestOverlayPermission() {
-        // 检测联想 ZUI 系统
         if (isZui()) {
             AlertDialog.Builder(this)
                 .setTitle(getString(R.string.overlay_permission_zui_title))

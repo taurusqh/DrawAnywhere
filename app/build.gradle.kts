@@ -7,12 +7,18 @@ android {
     namespace = "com.drawanywhere"
     compileSdk = 36
 
+    applicationVariants.configureEach { variant ->
+        variant.outputs.configureEach {
+            outputFileName = "DrawAnywhere-v${variant.versionName}-${variant.name}.apk"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.drawanywhere"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
     }
 
     buildFeatures {
