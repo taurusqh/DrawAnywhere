@@ -32,21 +32,29 @@ jobs:
           VERSION=$(grep 'versionName = "' app/build.gradle.kts | head -1 | sed -E 's/.*"([0-9.]+)".*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Generate temporary keystore
+      - name: Restore keystore from secret (if configured)
         run: |
-          keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
-            -keyalg RSA -keysize 2048 -validity 3650 \
-            -storepass temppass -keypass temppass \
-            -dname "CN=DrawAnywhere, OU=Dev, O=taurusqh, L=Unknown, ST=Unknown, C=CN"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > app/release.jks
+            echo "Keystore restored from secret"
+          else
+            keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
+              -keyalg RSA -keysize 2048 -validity 3650 \
+              -storepass temppass -keypass temppass \
+              -dname "CN=DrawAnywhere, OU=Dev, O=taurusqh, L=Unknown, ST=Unknown, C=CN"
+            echo "Temporary keystore generated (no KEYSTORE_BASE64 secret set)"
+          fi
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
       - name: Build release APK
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease
         env:
-          KEYSTORE_PASSWORD: temppass
-          KEYSTORE_KEY_PASSWORD: temppass
-          KEY_ALIAS: drawanywhere
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'temppass' }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD || 'temppass' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'drawanywhere' }}
 
       - name: Rename APK with version
         run: |
