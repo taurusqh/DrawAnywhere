@@ -29,7 +29,7 @@ jobs:
       - name: Get version name
         id: version
         run: |
-          VERSION=$(grep 'versionName' app/build.gradle.kts | sed -E 's/.*"([0-9.]+)".*/\1/')
+          VERSION=$(grep 'versionName = "' app/build.gradle.kts | head -1 | sed -E 's/.*"([0-9.]+)".*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Generate temporary keystore
@@ -72,7 +72,7 @@ jobs:
       - name: Get version name
         id: version
         run: |
-          VERSION=$(grep 'versionName' app/build.gradle.kts | sed -E 's/.*"([0-9.]+)".*/\1/')
+          VERSION=$(grep 'versionName = "' app/build.gradle.kts | head -1 | sed -E 's/.*"([0-9.]+)".*/\1/')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - uses: softprops/action-gh-release@v2
