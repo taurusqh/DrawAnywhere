@@ -26,7 +26,51 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # ===== 自动递增版本号 =====
+      - name: Auto increment version
+        id: bump_version
+        run: |
+          FILE="app/build.gradle.kts"
+          # 读取当前 versionCode 和 versionName
+          VERSION_CODE=$(grep 'versionCode = ' "$FILE" | head -1 | sed -E 's/.*=\s*([0-9]+)/\1/')
+          VERSION_NAME=$(grep 'versionName = "' "$FILE" | head -1 | sed -E 's/.*"([0-9.]+)".*/\1/')
+
+          echo "Current: v$VERSION_NAME (code=$VERSION_CODE)"
+
+          # versionCode 每次 +1
+          NEW_CODE=$((VERSION_CODE + 1))
+
+          # versionName 从 versionCode 派生：1.0.x（x = versionCode）
+          NEW_NAME="1.0.${NEW_CODE}"
+
+          # 写回 build.gradle.kts
+          sed -i "s/versionCode = ${VERSION_CODE}/versionCode = ${NEW_CODE}/" "$FILE"
+          sed -i "s/versionName = \"${VERSION_NAME}\"/versionName = \"${NEW_NAME}\"/" "$FILE"
+
+          echo "New: v${NEW_NAME} (code=${NEW_CODE})"
+          echo "version=$NEW_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$NEW_CODE" >> $GITHUB_OUTPUT
+
+      # 固定签名（从 GitHub Secrets 解码），确保所有版本同签名，可覆盖安装
+      - name: Decode keystore from secrets
+        id: keystore
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            mkdir -p app
+            echo "$KEYSTORE_B64" | base64 -d > app/release.jks
+            chmod 600 app/release.jks
+            echo "keystore_source=secret" >> $GITHUB_OUTPUT
+            echo "✅ Keystore decoded from secret"
+          else
+            echo "keystore_source=temp" >> $GITHUB_OUTPUT
+            echo "⚠️  No keystore secret, will use temp"
+          fi
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
+
+      # 降级：secrets 不存在时生成临时 keystore
       - name: Generate temporary keystore
+        if: steps.keystore.outputs.keystore_source == 'temp'
         run: |
           keytool -genkey -v -keystore app/release.jks -alias drawanywhere \
             -keyalg RSA -keysize 2048 -validity 3650 \
@@ -38,14 +82,22 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease
         env:
-          KEYSTORE_PASSWORD: temppass
-          KEYSTORE_KEY_PASSWORD: temppass
-          KEY_ALIAS: drawanywhere
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'temppass' }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'temppass' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'drawanywhere' }}
 
-      - uses: actions/upload-artifact@v4
+      - name: Rename APK with version
+        run: |
+          VERSION=${{ steps.bump_version.outputs.version }}
+          # 先删除旧的带版本号的文件
+          rm -f app/build/outputs/apk/release/DrawAnywhere-v*.apk
+          cp app/build/outputs/apk/release/*.apk app/build/outputs/apk/release/DrawAnywhere-v${VERSION}.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: app-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          name: apk
+          path: app/build/outputs/apk/release/DrawAnywhere-v*.apk
 
   release:
     if: github.event_name == 'workflow_dispatch' && inputs.upload_release
@@ -55,19 +107,35 @@ jobs:
       contents: write
 
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
-          name: app-release-apk
+          name: apk
+          path: ./apk
+
+      - name: Get version from artifact filename
+        id: version
+        run: |
+          # 从 APK 文件名提取版本号
+          APK_FILE=$(ls ./apk/DrawAnywhere-v*.apk | head -1)
+          BASENAME=$(basename "$APK_FILE" .apk)
+          VERSION=${BASENAME#DrawAnywhere-v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.3
-          name: v1.0.3
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
           body: |
-            ✨ DrawAnywhere v1.0.3
+            ✨ DrawAnywhere v${{ steps.version.outputs.version }}
 
-            - 修复安装权限问题：新增 REQUEST_INSTALL_PACKAGES 权限
-            - 安装 APK 前自动弹窗引导用户授权
-            - 修复编译错误（添加缺失的权限对话框方法）
-          files: app-release.apk
+            ### 修复
+            - 修复 ZUI 设备上撤销操作崩溃问题（深拷贝 Stroke 对象避免共享引用）
+            - 修复撤销/重做栈数据一致性问题
+
+            ### 其他
+            - 升级包页面 URL 显示，支持点击打开浏览器下载
+            - 构建产物只包含 APK 文件，文件名包含版本号
+          files: ./apk/*.apk
           fail_on_unmatched_files: false

@@ -286,11 +286,52 @@
                 android:textColor="#99AABB" />
         </LinearLayout>
 
-        <!-- 退出按钮 -->
+        <!-- 升级包链接 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:background="@drawable/card_bg"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📦 下载升级包"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/upgradeLinkText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="https://github.com/taurusqh/DrawAnywhere/releases"
+                android:textSize="12sp"
+                android:textColor="#667EEA"
+                android:autoLink="none"
+                android:clickable="true"
+                android:focusable="true"
+                android:maxLines="2"
+                android:ellipsize="end" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="点击链接在浏览器中打开下载页面"
+                android:textSize="11sp"
+                android:textColor="#8899BB" />
+        </LinearLayout>
+
+        <!-- 检查更新按钮 -->
         <Button
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:text="检查更新"
             android:textSize="15sp"
             android:textColor="#667EEA"
