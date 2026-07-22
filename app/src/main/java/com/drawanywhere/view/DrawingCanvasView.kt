@@ -80,8 +80,8 @@ class DrawingCanvasView(
         val distance = kotlin.math.sqrt(dx * dx + dy * dy)
         if (distance < 1f) return
         val density = resources.displayMetrics.density
-        val wavelength = 50f * density
-        val amplitude = 15f * density
+        val wavelength = 12.5f * density
+        val amplitude = 3.75f * density
         val cycles = (distance / wavelength).toFloat().coerceAtLeast(1f)
         val steps = (cycles * 8).toInt().coerceAtLeast(8)
         val path = Path()
