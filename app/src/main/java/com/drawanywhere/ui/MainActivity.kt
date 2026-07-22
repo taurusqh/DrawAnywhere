@@ -10,6 +10,8 @@ import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.drawanywhere.BuildConfig
 import com.drawanywhere.R
@@ -22,14 +24,28 @@ import kotlin.concurrent.thread
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        private const val REQUEST_OVERLAY_PERMISSION = 1001
-        private const val REQUEST_BATTERY_OPT = 1002
         private const val GITHUB_RELEASES_URL = "https://github.com/taurusqh/DrawAnywhere/releases"
         private const val GITHUB_API = "https://api.github.com/repos/taurusqh/DrawAnywhere/releases/latest"
     }
 
     private lateinit var versionText: TextView
     private lateinit var upgradeLinkText: TextView
+
+    private val overlayPermissionLauncher: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && canInstallPackages()) {
+                Toast.makeText(this, "已授权，可以安装", Toast.LENGTH_SHORT).show()
+            } else if (Settings.canDrawOverlays(this)) {
+                startOverlayService()
+                requestBatteryOptimization()
+                Toast.makeText(this, "权限已授予，悬浮按钮已显示", Toast.LENGTH_SHORT).show()
+            } else if (!isZui()) {
+                Toast.makeText(this, "未授予悬浮窗权限", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+    private val batteryOptLauncher: ActivityResultLauncher<Intent> =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ -> }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -200,7 +216,7 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton("去设置") { _, _ ->
                     val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
                     intent.data = Uri.parse("package:$packageName")
-                    startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
+                    overlayPermissionLauncher.launch(intent)
                 }
                 .setNegativeButton("取消", null)
                 .setCancelable(false)
@@ -243,7 +259,7 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton(getString(R.string.btn_settings)) { _, _ ->
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                     intent.data = Uri.parse("package:$packageName")
-                    startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
+                    overlayPermissionLauncher.launch(intent)
                 }
                 .setNegativeButton(getString(R.string.btn_cancel)) { _, _ ->
                     Toast.makeText(this, "需要悬浮窗权限才能使用", Toast.LENGTH_LONG).show()
@@ -259,7 +275,7 @@ class MainActivity : AppCompatActivity() {
                         Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                         Uri.parse("package:$packageName")
                     )
-                    startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION)
+                    overlayPermissionLauncher.launch(intent)
                 }
                 .setNegativeButton(getString(R.string.btn_cancel)) { _, _ ->
                     Toast.makeText(this, "需要悬浮窗权限才能使用", Toast.LENGTH_LONG).show()
@@ -283,26 +299,11 @@ class MainActivity : AppCompatActivity() {
                     Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                     Uri.parse("package:$packageName")
                 )
-                startActivityForResult(intent, REQUEST_BATTERY_OPT)
+                batteryOptLauncher.launch(intent)
             }
             .setNegativeButton("稍后", null)
             .setCancelable(true)
             .show()
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_OVERLAY_PERMISSION) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && canInstallPackages()) {
-                Toast.makeText(this, "已授权，可以安装", Toast.LENGTH_SHORT).show()
-            } else if (Settings.canDrawOverlays(this)) {
-                startOverlayService()
-                requestBatteryOptimization()
-                Toast.makeText(this, "权限已授予，悬浮按钮已显示", Toast.LENGTH_SHORT).show()
-            } else if (!isZui()) {
-                Toast.makeText(this, "未授予悬浮窗权限", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 
     private fun startOverlayService() {
@@ -331,6 +332,7 @@ class MainActivity : AppCompatActivity() {
         finishAffinity()
     }
 
+    @Deprecated("Deprecated in API, but needed for API 26+ compatibility")
     override fun onBackPressed() {
         moveTaskToBack(true)
     }

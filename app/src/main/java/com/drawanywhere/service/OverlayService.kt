@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.Icon
 import android.graphics.Point
 import android.net.Uri
 import android.os.Build
@@ -84,7 +85,7 @@ class OverlayService : Service() {
         // 标记已退出，防止 START_STICKY 重启
         isExiting = true
         try {
-            stopForeground(true)
+            stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {}
         hideOverlay()
         hideFloatingButton()
@@ -168,8 +169,7 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_ATTACHED_IN_DECOR,
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -384,6 +384,7 @@ class OverlayService : Service() {
     }
 
     /** 传统 File API 备用（Android 9 以下） */
+    @Suppress("DEPRECATION")
     private fun saveViaFile(bitmap: Bitmap, filename: String) {
         val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
         val subDir = java.io.File(dir, "DrawAnywhere")
@@ -442,12 +443,12 @@ class OverlayService : Service() {
             .setSmallIcon(R.drawable.ic_notification)
             .setOngoing(true)
             .addAction(Notification.Action.Builder(
-                android.R.drawable.ic_menu_edit,
+                Icon.createWithResource(this, android.R.drawable.ic_menu_edit),
                 getString(R.string.action_toggle_mode),
                 togglePending
             ).build())
             .addAction(Notification.Action.Builder(
-                android.R.drawable.ic_menu_close_clear_cancel,
+                Icon.createWithResource(this, android.R.drawable.ic_menu_close_clear_cancel),
                 getString(R.string.action_exit),
                 exitPending
             ).build())
