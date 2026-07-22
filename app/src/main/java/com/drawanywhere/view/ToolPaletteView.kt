@@ -92,8 +92,8 @@ class ToolPaletteView(
 
         // === 粗细 ===
         addStrokeButton(3f)
-        addStrokeButton(7f)
         addStrokeButton(12f)
+        addStrokeButton(24f)
         addDivider()
 
         // === 模式切换 ===
@@ -399,8 +399,8 @@ class ToolPaletteView(
         val btnSize = dp(44)
         val dotSize = when (width) {
             3f -> dp(5)
-            7f -> dp(10)
-            12f -> dp(17)
+            12f -> dp(10)
+            24f -> dp(17)
             else -> dp(8)
         }
         val container = FrameLayout(context).apply {
@@ -423,6 +423,23 @@ class ToolPaletteView(
             }
         }
         container.addView(dot)
+        // 宽度预览条：选中时显示与实际宽度成比例的水平线
+        val previewHeightPx = (width * resources.displayMetrics.density).toInt().coerceAtLeast(dp(3))
+        val previewWidthPx = dp(24)
+        val previewLine = View(context).apply {
+            val lp = FrameLayout.LayoutParams(previewWidthPx, previewHeightPx)
+            lp.gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            lp.bottomMargin = dp(3)
+            layoutParams = lp
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = (previewHeightPx / 2f).coerceAtMost(dp(4).toFloat())
+                setColor(Color.WHITE)
+            }
+            visibility = View.GONE
+            tag = "preview_line"
+        }
+        container.addView(previewLine)
         strokeButtons.add(container)
         inner.addView(container)
     }
@@ -431,11 +448,13 @@ class ToolPaletteView(
         activeStrokeBtn?.let { btn ->
             btn.alpha = 0.35f
             btn.setBackgroundColor(Color.TRANSPARENT)
+            btn.findViewWithTag<View>("preview_line")?.visibility = View.GONE
         }
         val btn = strokeButtons.getOrNull(index)
         btn?.let {
             it.alpha = 1f
             it.setBackgroundColor(0xFF4A6BDF.toInt())
+            it.findViewWithTag<View>("preview_line")?.visibility = View.VISIBLE
         }
         activeStrokeBtn = btn
     }

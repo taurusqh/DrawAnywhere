@@ -2,6 +2,7 @@ package com.drawanywhere.view
 
 import android.content.Context
 import android.graphics.*
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.MotionEvent
@@ -19,7 +20,15 @@ class DrawingCanvasView(
         strokeJoin = Paint.Join.ROUND
     }
 
-    private val clearXfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+    /** CLEAR 模式（API 29+ 用 BlendMode，更低版本用 PorterDuffXfermode） */
+    private val clearBlend: Any? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            BlendMode.CLEAR
+        } else {
+            @Suppress("DEPRECATION")
+            PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+        }
+    }
 
     // ===== 离屏缓冲（像素橡皮擦使用） =====
 
@@ -28,10 +37,14 @@ class DrawingCanvasView(
 
     /** 像素橡皮擦专用画笔（固定 CLEAR 模式） */
     private val pixelEraserPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
+        @Suppress("DEPRECATION")
+        xfermode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) null else PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            blendMode = BlendMode.CLEAR
+        }
     }
 
     /** 离屏缓冲脏标记：引擎状态变更后需要重建 */
@@ -73,10 +86,15 @@ class DrawingCanvasView(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w > 0 && h > 0) {
-            offscreenBitmap?.recycle()
-            offscreenBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            offscreenCanvas = Canvas(offscreenBitmap!!)
-            offscreenDirty = true
+            try {
+                val newBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                offscreenBitmap?.recycle()
+                offscreenBitmap = newBitmap
+                offscreenCanvas = Canvas(newBitmap)
+                offscreenDirty = true
+            } catch (_: OutOfMemoryError) {
+                // 大屏设备可能 OOM，保留旧缓冲
+            }
         }
     }
 
@@ -103,9 +121,14 @@ class DrawingCanvasView(
 
         if (isPixelEraser) {
             // 像素橡皮擦：用 CLEAR 模式绘制路径（从缓冲中擦除像素）
-            paint.xfermode = clearXfermode
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                paint.blendMode = BlendMode.CLEAR
+            } else {
+                @Suppress("DEPRECATION")
+                paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+            }
             paint.color = Color.TRANSPARENT
-            paint.strokeWidth = stroke.width * 3
+            paint.strokeWidth = stroke.width * 2
             paint.pathEffect = null
         } else {
             paint.xfermode = null
@@ -124,6 +147,9 @@ class DrawingCanvasView(
         }
 
         paint.xfermode = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            paint.blendMode = null
+        }
         paint.pathEffect = null
     }
 
@@ -191,6 +217,21 @@ class DrawingCanvasView(
 
     // ===== 当前笔画预览 =====
 
+    /** 像素橡皮擦光标画笔（独立 Paint，不污染主 paint） */
+    private val eraserCursorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = Color.argb(100, 200, 200, 200)
+        strokeWidth = 2f
+    }
+
+    /** 像素橡皮擦轨迹画笔（半透明，显示擦除痕迹） */
+    private val eraserTrailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(80, 180, 180, 180)
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
     private fun drawCurrentStroke(canvas: Canvas) {
         val tool = engine.currentTool
         paint.color = engine.currentColor
@@ -215,15 +256,22 @@ class DrawingCanvasView(
                 }
             }
             DrawTool.PIXEL_ERASER -> {
+                // 绘制擦除轨迹（半透明路径，显示擦过的地方和宽度）
+                if (currentPoints.size >= 2) {
+                    eraserTrailPaint.strokeWidth = engine.currentStrokeWidth * 2
+                    val path = Path()
+                    path.moveTo(currentPoints[0].x, currentPoints[0].y)
+                    for (i in 1 until currentPoints.size) {
+                        path.lineTo(currentPoints[i].x, currentPoints[i].y)
+                    }
+                    canvas.drawPath(path, eraserTrailPaint)
+                }
                 // 绘制橡皮擦光标：半透明圆圈表示擦除位置和大小
                 if (currentPoints.isNotEmpty()) {
                     val lastPt = currentPoints.last()
-                    paint.style = Paint.Style.STROKE
-                    paint.color = Color.argb(100, 200, 200, 200)
-                    paint.strokeWidth = 2f * resources.displayMetrics.density
-                    paint.pathEffect = null
+                    eraserCursorPaint.strokeWidth = 2f * resources.displayMetrics.density
                     val cursorRadius = engine.currentStrokeWidth * 1.5f
-                    canvas.drawCircle(lastPt.x, lastPt.y, cursorRadius, paint)
+                    canvas.drawCircle(lastPt.x, lastPt.y, cursorRadius, eraserCursorPaint)
                 }
             }
             DrawTool.LINE, DrawTool.RECT, DrawTool.CIRCLE, DrawTool.DASHED_LINE, DrawTool.WAVE_LINE -> {
@@ -251,14 +299,14 @@ class DrawingCanvasView(
     /** 在离屏缓冲上擦除像素（两点一线） */
     private fun eraseLineOnOffscreen(fromX: Float, fromY: Float, toX: Float, toY: Float) {
         val canvas = offscreenCanvas ?: return
-        pixelEraserPaint.strokeWidth = engine.currentStrokeWidth * 3
+        pixelEraserPaint.strokeWidth = engine.currentStrokeWidth * 2
         canvas.drawLine(fromX, fromY, toX, toY, pixelEraserPaint)
     }
 
     /** 在离屏缓冲上擦除单个点 */
     private fun erasePointOnOffscreen(x: Float, y: Float) {
         val canvas = offscreenCanvas ?: return
-        pixelEraserPaint.strokeWidth = engine.currentStrokeWidth * 3
+        pixelEraserPaint.strokeWidth = engine.currentStrokeWidth * 2
         canvas.drawPoint(x, y, pixelEraserPaint)
     }
 
@@ -273,10 +321,17 @@ class DrawingCanvasView(
         offscreenDirty = false
     }
 
-    /** 手动清除离屏缓冲（配合 engine.clear() 调用，clearOffscreen + safeInvalidate 完整清理） */
+    /** 手动清除离屏缓冲（配合 engine.clear() 使用） */
     fun clearOffscreen() {
         offscreenBitmap?.eraseColor(Color.TRANSPARENT)
         offscreenDirty = false
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        offscreenBitmap?.recycle()
+        offscreenBitmap = null
+        offscreenCanvas = null
     }
 
     // ===== 触摸事件 =====

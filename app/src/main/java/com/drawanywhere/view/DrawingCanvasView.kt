@@ -128,7 +128,7 @@ class DrawingCanvasView(
                 paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
             }
             paint.color = Color.TRANSPARENT
-            paint.strokeWidth = stroke.width * 3
+            paint.strokeWidth = stroke.width * 2
             paint.pathEffect = null
         } else {
             paint.xfermode = null
@@ -224,6 +224,14 @@ class DrawingCanvasView(
         strokeWidth = 2f
     }
 
+    /** 像素橡皮擦轨迹画笔（半透明，显示擦除痕迹） */
+    private val eraserTrailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(80, 180, 180, 180)
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+
     private fun drawCurrentStroke(canvas: Canvas) {
         val tool = engine.currentTool
         paint.color = engine.currentColor
@@ -248,6 +256,16 @@ class DrawingCanvasView(
                 }
             }
             DrawTool.PIXEL_ERASER -> {
+                // 绘制擦除轨迹（半透明路径，显示擦过的地方和宽度）
+                if (currentPoints.size >= 2) {
+                    eraserTrailPaint.strokeWidth = engine.currentStrokeWidth * 2
+                    val path = Path()
+                    path.moveTo(currentPoints[0].x, currentPoints[0].y)
+                    for (i in 1 until currentPoints.size) {
+                        path.lineTo(currentPoints[i].x, currentPoints[i].y)
+                    }
+                    canvas.drawPath(path, eraserTrailPaint)
+                }
                 // 绘制橡皮擦光标：半透明圆圈表示擦除位置和大小
                 if (currentPoints.isNotEmpty()) {
                     val lastPt = currentPoints.last()
@@ -281,14 +299,14 @@ class DrawingCanvasView(
     /** 在离屏缓冲上擦除像素（两点一线） */
     private fun eraseLineOnOffscreen(fromX: Float, fromY: Float, toX: Float, toY: Float) {
         val canvas = offscreenCanvas ?: return
-        pixelEraserPaint.strokeWidth = engine.currentStrokeWidth * 3
+        pixelEraserPaint.strokeWidth = engine.currentStrokeWidth * 2
         canvas.drawLine(fromX, fromY, toX, toY, pixelEraserPaint)
     }
 
     /** 在离屏缓冲上擦除单个点 */
     private fun erasePointOnOffscreen(x: Float, y: Float) {
         val canvas = offscreenCanvas ?: return
-        pixelEraserPaint.strokeWidth = engine.currentStrokeWidth * 3
+        pixelEraserPaint.strokeWidth = engine.currentStrokeWidth * 2
         canvas.drawPoint(x, y, pixelEraserPaint)
     }
 
