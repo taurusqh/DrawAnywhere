@@ -2,6 +2,7 @@ package com.drawanywhere.drawing
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -27,7 +28,17 @@ class DrawingEngineTest {
         engine.addStroke(stroke)
 
         assertEquals(1, engine.strokes.size)
-        assertTrue(engine.strokes[0] === stroke)
+    }
+
+    @Test
+    fun `strokes getter returns deep copy not original references`() {
+        val engine = DrawingEngine()
+        val stroke = Stroke(mutableListOf(DrawingPoint(10f, 20f)))
+
+        engine.addStroke(stroke)
+
+        // strokes getter 返回深拷贝，与原始对象不同引用
+        assertNotSame(stroke, engine.strokes[0])
     }
 
     @Test
@@ -57,7 +68,6 @@ class DrawingEngineTest {
         engine.redo()
 
         assertEquals(1, engine.strokes.size)
-        assertTrue(engine.strokes[0] === stroke)
         assertFalse(engine.canRedo)
         assertTrue(engine.canUndo)
     }
@@ -167,7 +177,6 @@ class DrawingEngineTest {
 
         engine.undo()
         assertEquals(1, engine.strokes.size)
-        assertTrue(engine.strokes[0] === stroke1)
 
         engine.undo()
         assertEquals(0, engine.strokes.size)
