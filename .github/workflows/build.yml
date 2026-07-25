@@ -100,7 +100,8 @@ jobs:
           path: app/build/outputs/apk/release/DrawAnywhere-v*.apk
 
   release:
-    if: github.event_name == 'workflow_dispatch' && inputs.upload_release
+    # push 到 main 或者手动触发时自动发 release
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -131,8 +132,7 @@ jobs:
             ✨ DrawAnywhere v${{ steps.version.outputs.version }}
 
             ### 修复
-            - 修复笔画粗细按钮的选中下划线随粗细变化的问题
-            - 移除笔画按钮底部的白色指示条，选中改用背景高亮显示
+            - 修复笔画粗细按钮的选中下划线随粗细变大问题，移除指示条改背景高亮
 
             ### 其他
             - 升级包页面 URL 显示，支持点击打开浏览器下载
