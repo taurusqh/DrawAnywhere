@@ -103,6 +103,7 @@ class ToolPaletteView(
         selectTool(DrawTool.PEN)
         selectColor(0xFFFF3B30.toInt())
         selectStroke(1)  // 中间粗细默认
+        engine.setStrokeWidth(12f)
     }
 
     private fun addToolButton(tool: DrawTool) {
