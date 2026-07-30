@@ -11,8 +11,8 @@ android {
         applicationId = "com.drawanywhere"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "1.0.13"
+        versionCode = 14
+        versionName = "1.0.14"
     }
 
     buildFeatures {
@@ -62,8 +62,12 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.mockito:mockito-core:5.14.2")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    maxHeapSize = "2g"
+    jvmArgs("-Djdk.attach.allowAttachSelf=true", "-Dfile.encoding=UTF-8")
 }

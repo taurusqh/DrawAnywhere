@@ -53,7 +53,13 @@ class DrawingCanvasView(
     /** 当前是否处于绘图模式 */
     var isDrawMode: Boolean = true
         set(value) {
-            if (!value && field) finishStroke()
+            if (!value && field) {
+                previousToolBeforeMultiTouch?.let {
+                    engine.setTool(it)
+                    previousToolBeforeMultiTouch = null
+                }
+                finishStroke()
+            }
             field = value
         }
 
@@ -78,6 +84,7 @@ class DrawingCanvasView(
     private var currentPoints = mutableListOf<DrawingPoint>()
     private var currentStartPoint: DrawingPoint? = null
     private var previewEndPoint: DrawingPoint? = null
+    private var previousToolBeforeMultiTouch: DrawTool? = null
 
     // 像素橡皮擦状态
     private var lastEraserX = 0f
@@ -342,7 +349,7 @@ class DrawingCanvasView(
         val y = event.y
 
         try {
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     currentStartPoint = DrawingPoint(x, y)
                     previewEndPoint = DrawingPoint(x, y)
@@ -365,7 +372,41 @@ class DrawingCanvasView(
                     invalidate()
                     return true
                 }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    if (event.pointerCount >= 2) {
+                        if (previousToolBeforeMultiTouch == null) {
+                            previousToolBeforeMultiTouch = engine.currentTool
+                        }
+                        engine.setTool(DrawTool.ERASER)
+                        // 使用两指中点作为起始位置
+                        val midX = (event.getX(0) + event.getX(1)) / 2f
+                        val midY = (event.getY(0) + event.getY(1)) / 2f
+                        currentPoints = mutableListOf(DrawingPoint(midX, midY))
+                        invalidate()
+                        return true
+                    }
+                    return true
+                }
                 MotionEvent.ACTION_MOVE -> {
+                    if (previousToolBeforeMultiTouch != null) {
+                        val eraserRadius = 40 * resources.displayMetrics.density
+                        // 两指时用中点，一根手指时用该手指位置
+                        val trackX: Float
+                        val trackY: Float
+                        if (event.pointerCount >= 2) {
+                            trackX = (event.getX(0) + event.getX(1)) / 2f
+                            trackY = (event.getY(0) + event.getY(1)) / 2f
+                        } else {
+                            trackX = event.x
+                            trackY = event.y
+                        }
+                        // 实时擦除，用户可立即看到反馈
+                        engine.eraseAt(trackX, trackY, eraserRadius)
+                        currentPoints.add(DrawingPoint(trackX, trackY))
+                        offscreenDirty = true
+                        invalidate()
+                        return true
+                    }
                     when (engine.currentTool) {
                         DrawTool.PEN, DrawTool.ERASER -> {
                             currentPoints.add(DrawingPoint(x, y))
@@ -384,7 +425,18 @@ class DrawingCanvasView(
                     invalidate()
                     return true
                 }
+                MotionEvent.ACTION_POINTER_UP -> {
+                    if (previousToolBeforeMultiTouch != null) {
+                        // 还剩手指在屏幕上，不掉结束擦除
+                        return true
+                    }
+                    return true
+                }
                 MotionEvent.ACTION_UP -> {
+                    if (previousToolBeforeMultiTouch != null) {
+                        finishTwoFingerEraser()
+                        return true
+                    }
                     when (engine.currentTool) {
                         DrawTool.ERASER -> {
                             currentPoints.add(DrawingPoint(x, y))
@@ -424,6 +476,8 @@ class DrawingCanvasView(
             }
         } catch (_: Exception) {
             // 触摸事件处理异常时兜底，防止 ANR
+            previousToolBeforeMultiTouch?.let { engine.setTool(it) }
+            previousToolBeforeMultiTouch = null
             currentPoints = mutableListOf()
             currentStartPoint = null
             previewEndPoint = null
@@ -446,6 +500,17 @@ class DrawingCanvasView(
         val stroke = engine.createStroke(points)
         engine.addStroke(stroke)
         renderStrokeToOffscreen(stroke)
+    }
+
+    /** 结束两指橡皮擦并恢复原工具（笔画已在 MOVE 中实时擦除） */
+    private fun finishTwoFingerEraser() {
+        previousToolBeforeMultiTouch?.let { engine.setTool(it) }
+        previousToolBeforeMultiTouch = null
+        currentPoints = mutableListOf()
+        currentStartPoint = null
+        previewEndPoint = null
+        offscreenDirty = true
+        invalidate()
     }
 
     /** 将画布内容渲染到 Bitmap（白底） */
