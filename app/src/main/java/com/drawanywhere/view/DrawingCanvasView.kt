@@ -377,11 +377,14 @@ class DrawingCanvasView(
                         if (previousToolBeforeMultiTouch == null) {
                             previousToolBeforeMultiTouch = engine.currentTool
                         }
-                        engine.setTool(DrawTool.ERASER)
+                        engine.setTool(DrawTool.PIXEL_ERASER)
                         // 使用两指中点作为起始位置
                         val midX = (event.getX(0) + event.getX(1)) / 2f
                         val midY = (event.getY(0) + event.getY(1)) / 2f
                         currentPoints = mutableListOf(DrawingPoint(midX, midY))
+                        erasePointOnOffscreen(midX, midY)
+                        lastEraserX = midX
+                        lastEraserY = midY
                         invalidate()
                         return true
                     }
@@ -389,7 +392,6 @@ class DrawingCanvasView(
                 }
                 MotionEvent.ACTION_MOVE -> {
                     if (previousToolBeforeMultiTouch != null) {
-                        val eraserRadius = 40 * resources.displayMetrics.density
                         // 两指时用中点，一根手指时用该手指位置
                         val trackX: Float
                         val trackY: Float
@@ -400,10 +402,11 @@ class DrawingCanvasView(
                             trackX = event.x
                             trackY = event.y
                         }
-                        // 实时擦除，用户可立即看到反馈
-                        engine.eraseAt(trackX, trackY, eraserRadius)
+                        // 像素橡皮擦：直接在离屏缓冲上实时擦除线段
+                        eraseLineOnOffscreen(lastEraserX, lastEraserY, trackX, trackY)
                         currentPoints.add(DrawingPoint(trackX, trackY))
-                        offscreenDirty = true
+                        lastEraserX = trackX
+                        lastEraserY = trackY
                         invalidate()
                         return true
                     }
@@ -502,14 +505,23 @@ class DrawingCanvasView(
         renderStrokeToOffscreen(stroke)
     }
 
-    /** 结束两指橡皮擦并恢复原工具（笔画已在 MOVE 中实时擦除） */
+    /** 结束两指像素擦除并恢复原工具（已实时擦除，只创建笔画用于撤销） */
     private fun finishTwoFingerEraser() {
+        if (currentPoints.size >= 2) {
+            // 确保最后一段也被擦除（避免最后一次 MOVE 后未覆盖到的线段）
+            val lastPt = currentPoints.last()
+            if (lastEraserX != lastPt.x || lastEraserY != lastPt.y) {
+                eraseLineOnOffscreen(lastEraserX, lastEraserY, lastPt.x, lastPt.y)
+            }
+            // 创建 PIXEL_ERASER 笔画用于撤销
+            val stroke = engine.createStroke(currentPoints)
+            engine.addStroke(stroke)
+        }
         previousToolBeforeMultiTouch?.let { engine.setTool(it) }
         previousToolBeforeMultiTouch = null
         currentPoints = mutableListOf()
         currentStartPoint = null
         previewEndPoint = null
-        offscreenDirty = true
         invalidate()
     }
 

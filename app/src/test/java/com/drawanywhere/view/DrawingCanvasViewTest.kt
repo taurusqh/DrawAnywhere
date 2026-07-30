@@ -9,6 +9,7 @@ import com.drawanywhere.drawing.DrawTool
 import com.drawanywhere.drawing.Stroke
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -17,7 +18,7 @@ import org.mockito.kotlin.whenever
 import org.mockito.stubbing.Stubber
 
 /**
- * Tests for the two-finger eraser feature in DrawingCanvasView.
+ * Tests for the two-finger pixel eraser feature in DrawingCanvasView.
  *
  * Three layers:
  * 1. Engine-level workflow tests — pure logic, no Android dependencies, always run.
@@ -42,59 +43,53 @@ class DrawingCanvasViewTest {
     // ========================================================================
 
     @Test
-    fun `two-finger workflow saves tool switches to eraser erases points and restores`() {
-        engine.addStroke(Stroke(mutableListOf(DrawingPoint(100f, 100f))))
-        assertEquals(1, engine.strokes.size)
-
+    fun `two-finger workflow switches to pixel eraser creates stroke and restores tool`() {
         val previousTool = engine.currentTool
         assertEquals(DrawTool.PEN, previousTool)
 
-        engine.setTool(DrawTool.ERASER)
-        assertEquals(DrawTool.ERASER, engine.currentTool)
+        // 两指模式：切换到 PIXEL_ERASER
+        engine.setTool(DrawTool.PIXEL_ERASER)
+        assertEquals(DrawTool.PIXEL_ERASER, engine.currentTool)
 
-        engine.eraseAt(100f, 100f, 30f)
-        assertTrue(engine.strokes.isEmpty())
-
-        engine.setTool(previousTool)
-        assertEquals(DrawTool.PEN, engine.currentTool)
-        assertTrue(engine.canUndo)
-    }
-
-    @Test
-    fun `two-finger eraser erases multiple points along movement path`() {
-        engine.addStroke(Stroke(mutableListOf(DrawingPoint(100f, 100f))))
-        engine.addStroke(Stroke(mutableListOf(DrawingPoint(200f, 200f))))
-        engine.addStroke(Stroke(mutableListOf(DrawingPoint(300f, 300f))))
-        assertEquals(3, engine.strokes.size)
-
-        val previousTool = engine.currentTool
-        engine.setTool(DrawTool.ERASER)
-
-        engine.eraseAt(100f, 100f, 30f)
-        assertEquals(2, engine.strokes.size)
-
-        engine.eraseAt(200f, 200f, 30f)
+        // 创建 PIXEL_ERASER 笔画（用于 undo）
+        val points = listOf(DrawingPoint(100f, 100f), DrawingPoint(101f, 101f))
+        val stroke = engine.createStroke(points)
+        engine.addStroke(stroke)
         assertEquals(1, engine.strokes.size)
+        assertEquals(DrawTool.PIXEL_ERASER, engine.strokes[0].tool)
 
-        engine.eraseAt(300f, 300f, 30f)
-        assertTrue(engine.strokes.isEmpty())
-
+        // 恢复原工具
         engine.setTool(previousTool)
         assertEquals(DrawTool.PEN, engine.currentTool)
         assertTrue(engine.canUndo)
     }
 
     @Test
-    fun `tool is restored even when no strokes were erased`() {
+    fun `pixel eraser creates single stroke for multi-point path`() {
+        engine.setTool(DrawTool.PIXEL_ERASER)
+
+        val points = listOf(
+            DrawingPoint(100f, 100f),
+            DrawingPoint(150f, 150f),
+            DrawingPoint(200f, 200f)
+        )
+        val stroke = engine.createStroke(points)
+        engine.addStroke(stroke)
+
+        assertEquals(1, engine.strokes.size, "Single stroke for the entire path")
+        assertEquals(3, engine.strokes[0].points.size, "All points preserved in stroke")
+        assertEquals(DrawTool.PIXEL_ERASER, engine.strokes[0].tool)
+    }
+
+    @Test
+    fun `tool is restored even without stroke creation`() {
         engine.setTool(DrawTool.RECT)
 
         val previousTool = engine.currentTool
-        engine.setTool(DrawTool.ERASER)
-        engine.eraseAt(9999f, 9999f, 30f)
-        assertTrue(engine.strokes.isEmpty())
-        assertFalse(engine.canUndo)
-
+        engine.setTool(DrawTool.PIXEL_ERASER)
+        // 没有创建笔画（当前Points 不足 2 点的情况）
         engine.setTool(previousTool)
+
         assertEquals(DrawTool.RECT, engine.currentTool)
     }
 
@@ -104,7 +99,7 @@ class DrawingCanvasViewTest {
             engine.setTool(tool)
             val previousTool = engine.currentTool
 
-            engine.setTool(DrawTool.ERASER)
+            engine.setTool(DrawTool.PIXEL_ERASER)
             engine.setTool(previousTool)
 
             assertEquals(tool, engine.currentTool, "Failed to restore $tool")
@@ -116,7 +111,7 @@ class DrawingCanvasViewTest {
         engine.setTool(DrawTool.PEN)
 
         // This is exactly what the catch block in onTouchEvent executes:
-        engine.setTool(DrawTool.ERASER)
+        engine.setTool(DrawTool.PIXEL_ERASER)
         val previousToolBeforeMultiTouch: DrawTool? = DrawTool.PEN
         previousToolBeforeMultiTouch?.let { engine.setTool(it) }
 
@@ -128,89 +123,82 @@ class DrawingCanvasViewTest {
     // ========================================================================
 
     @Test
-    fun `finishTwoFingerEraser restores tool without batch erase`() {
+    fun `finishTwoFingerEraser creates pixel eraser stroke and restores tool`() {
         val view = createView()
-        // MOVE 中已实时擦除，strokes 已被清除
-        engine.clear()
-        engine.setTool(DrawTool.ERASER)
+        engine.setTool(DrawTool.PIXEL_ERASER)
         setPrivateField(view, "previousToolBeforeMultiTouch", DrawTool.PEN)
         setPrivateField(view, "currentPoints",
             mutableListOf(DrawingPoint(100f, 100f), DrawingPoint(101f, 101f)))
+        // 模拟 lastEraserX/Y 与最后一个点一致（无需额外擦除）
+        setPrivateField(view, "lastEraserX", 101f)
+        setPrivateField(view, "lastEraserY", 101f)
 
         invokeFinishTwoFingerEraser(view)
 
+        // PIXEL_ERASER 笔画应被创建（用于 undo）
+        assertEquals(1, engine.strokes.size, "PIXEL_ERASER stroke should be created for undo")
+        assertEquals(DrawTool.PIXEL_ERASER, engine.strokes[0].tool)
         assertEquals(DrawTool.PEN, engine.currentTool, "Tool should be restored")
     }
 
     @Test
-    fun `finishTwoFingerEraser with single point does not erase`() {
+    fun `finishTwoFingerEraser with single point does not create stroke`() {
         val view = createView()
-        engine.addStroke(Stroke(mutableListOf(DrawingPoint(100f, 100f))))
-        assertEquals(1, engine.strokes.size)
-
-        // Only one point — finishTwoFingerEraser requires >= 2 to erase
+        engine.setTool(DrawTool.PIXEL_ERASER)
         setPrivateField(view, "previousToolBeforeMultiTouch", DrawTool.PEN)
         setPrivateField(view, "currentPoints",
-            mutableListOf(DrawingPoint(100f, 100f)))
-        engine.setTool(DrawTool.ERASER)
+            mutableListOf(DrawingPoint(100f, 100f)))  // only 1 point
 
         invokeFinishTwoFingerEraser(view)
 
-        // Stroke should remain because < 2 points
-        assertEquals(1, engine.strokes.size, "Stroke should NOT be erased with < 2 points")
-        assertEquals(DrawTool.PEN, engine.currentTool, "Tool should be restored anyway")
+        // < 2 points → no stroke created
+        assertEquals(0, engine.strokes.size)
+        assertEquals(DrawTool.PEN, engine.currentTool, "Tool should be restored")
     }
 
     @Test
     fun `finishTwoFingerEraser with empty points restores tool`() {
         val view = createView()
         engine.addStroke(Stroke(mutableListOf(DrawingPoint(100f, 100f))))
-        assertEquals(1, engine.strokes.size)
 
         setPrivateField(view, "previousToolBeforeMultiTouch", DrawTool.PEN)
         setPrivateField(view, "currentPoints", mutableListOf<DrawingPoint>())
-        engine.setTool(DrawTool.ERASER)
+        engine.setTool(DrawTool.PIXEL_ERASER)
 
         invokeFinishTwoFingerEraser(view)
 
-        assertEquals(1, engine.strokes.size, "No erasing with empty points")
+        assertEquals(1, engine.strokes.size, "Existing stroke preserved")
         assertEquals(DrawTool.PEN, engine.currentTool, "Tool restored")
     }
 
     @Test
-    fun `finishTwoFingerEraser restores tool when no previous was saved`() {
+    fun `finishTwoFingerEraser does not restore tool when no previous was saved`() {
         val view = createView()
         engine.setTool(DrawTool.RECT)
 
         setPrivateField(view, "previousToolBeforeMultiTouch", null)
         setPrivateField(view, "currentPoints",
             mutableListOf(DrawingPoint(10f, 10f), DrawingPoint(20f, 20f)))
-        engine.setTool(DrawTool.ERASER)
+        engine.setTool(DrawTool.PIXEL_ERASER)
 
         invokeFinishTwoFingerEraser(view)
 
-        // originalTool was null, so engine should remain ERASER
-        // (the code only restores if previousToolBeforeMultiTouch is non-null)
-        assertEquals(DrawTool.ERASER, engine.currentTool,
-            "Tool should stay ERASER when no previous tool was saved")
+        // previousToolBeforeMultiTouch was null → tool should stay PIXEL_ERASER
+        assertEquals(DrawTool.PIXEL_ERASER, engine.currentTool)
     }
 
     @Test
-    fun `finishTwoFingerEraser does not erase when currentPoints has insufficient data`() {
+    fun `finishTwoFingerEraser does not create stroke when points insufficient`() {
         val view = createView()
-        engine.addStroke(Stroke(mutableListOf(DrawingPoint(100f, 100f))))
-        assertEquals(1, engine.strokes.size)
-
+        engine.setTool(DrawTool.PIXEL_ERASER)
         setPrivateField(view, "previousToolBeforeMultiTouch", DrawTool.PEN)
         setPrivateField(view, "currentPoints",
-            mutableListOf(DrawingPoint(100f, 100f)))
-        engine.setTool(DrawTool.ERASER)
+            mutableListOf(DrawingPoint(100f, 100f)))  // only 1 point
 
         invokeFinishTwoFingerEraser(view)
 
-        assertEquals(1, engine.strokes.size,
-            "One point should not be enough to trigger erase")
-        assertEquals(DrawTool.PEN, engine.currentTool, "Tool should be restored")
+        assertEquals(0, engine.strokes.size)
+        assertEquals(DrawTool.PEN, engine.currentTool)
     }
 
     // ========================================================================
@@ -218,18 +206,15 @@ class DrawingCanvasViewTest {
     // ========================================================================
 
     @Test
-    fun `POINTER_DOWN switches to ERASER then UP restores tool`() {
+    fun `POINTER_DOWN switches to PIXEL_ERASER then UP restores tool`() {
         val view = createView()
 
-        engine.addStroke(Stroke(mutableListOf(DrawingPoint(100f, 100f))))
-        assertEquals(1, engine.strokes.size)
-
-        // Simulate: ACTION_POINTER_DOWN -> switch to ERASER
+        // Simulate: ACTION_POINTER_DOWN -> switch to PIXEL_ERASER
         setPrivateField(view, "previousToolBeforeMultiTouch", DrawTool.PEN)
         setPrivateField(view, "currentPoints",
             mutableListOf(DrawingPoint(50f, 60f), DrawingPoint(100f, 100f)))
-        engine.setTool(DrawTool.ERASER)
-        assertEquals(DrawTool.ERASER, engine.currentTool)
+        engine.setTool(DrawTool.PIXEL_ERASER)
+        assertEquals(DrawTool.PIXEL_ERASER, engine.currentTool)
 
         // Simulate: ACTION_UP -> finishTwoFingerEraser()
         invokeFinishTwoFingerEraser(view)
@@ -244,15 +229,10 @@ class DrawingCanvasViewTest {
 
         engine.addStroke(Stroke(mutableListOf(DrawingPoint(100f, 100f))))
 
-        // Set up state corresponding to single-touch drawing with PEN
-        // (previousToolBeforeMultiTouch is null, currentPoints has one point,
-        //  engine tool is still PEN)
+        // Single-touch drawing with PEN (previousToolBeforeMultiTouch is null)
         setPrivateField(view, "previousToolBeforeMultiTouch", null)
         setPrivateField(view, "currentPoints",
             mutableListOf(DrawingPoint(50f, 60f), DrawingPoint(100f, 100f)))
-
-        // finishTwoFingerEraser checks if previousToolBeforeMultiTouch != null
-        // before restoring tool. Since it's null, tool stays PEN.
         engine.setTool(DrawTool.PEN)
 
         assertEquals(DrawTool.PEN, engine.currentTool)
@@ -260,12 +240,7 @@ class DrawingCanvasViewTest {
 
     @Test
     fun `multi-touch with single pointer does not switch tool`() {
-        val view = createView()
-
-        // Simulate: ACTION_POINTER_DOWN with pointerCount=1
-        // In onTouchEvent, the condition `if (event.pointerCount >= 2)` fails
-        // So no tool change occurs
-
+        // pointerCount < 2 → no tool change occurs
         assertEquals(DrawTool.PEN, engine.currentTool)
     }
 
@@ -273,12 +248,10 @@ class DrawingCanvasViewTest {
     fun `catch block in onTouchEvent restores tool on exception`() {
         val view = createView()
 
-        // Simulate what happens in the catch block:
-        // An exception occurred during touch handling, tool was switched to ERASER,
-        // catch block restores it back
+        // Simulate: exception during touch handling
         engine.setTool(DrawTool.PEN)
         setPrivateField(view, "previousToolBeforeMultiTouch", DrawTool.PEN)
-        engine.setTool(DrawTool.ERASER)
+        engine.setTool(DrawTool.PIXEL_ERASER)
 
         // Execute catch block logic:
         val previousToolBeforeMultiTouch: DrawTool? =
