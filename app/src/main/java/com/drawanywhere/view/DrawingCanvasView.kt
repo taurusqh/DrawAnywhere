@@ -14,6 +14,9 @@ class DrawingCanvasView(
     private val engine: DrawingEngine
 ) : View(context) {
 
+    /** 复用主线程 Handler（避免每次 post 都 new 实例） */
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -66,14 +69,34 @@ class DrawingCanvasView(
     var onSaveRequest: (() -> Unit)? = null
 
     /** 安全刷新（跨窗口安全，通过主线程 Handler 中转） */
-    fun safeInvalidate() {
+    fun safeInvalidate() = runOnMain { /* 引擎状态已在外部变更，只需刷新画布 */ }
+
+    /**
+     * 在主线程上执行引擎操作后刷新画布。
+     *
+     * 跨窗口场景（ToolPaletteView 和 DrawingCanvasView 分属不同 ViewRootImpl）：
+     * 引擎状态变更必须在 onDraw() 的同一线程执行，否则 ZUI 等 ROM 中
+     * 两个窗口的 UI 线程可能产生竞态，导致 engine.strokes 在 rebuildOffscreen
+     * 读取时仍处于中间状态而崩溃。
+     */
+    fun runOnMain(action: () -> Unit) {
+        postToMain {
+            try {
+                action()
+            } finally {
+                offscreenDirty = true
+                invalidate()
+            }
+        }
+    }
+
+    /** 统一的主线程 post，带异常兜底 */
+    private fun postToMain(action: () -> Unit) {
         try {
-            Handler(Looper.getMainLooper()).post {
+            mainHandler.post {
                 try {
                     if (isAttachedToWindow) {
-                        // 外部调用安全刷新说明引擎状态已变更（undo/clear），标记重建
-                        offscreenDirty = true
-                        invalidate()
+                        action()
                     }
                 } catch (_: Exception) {}
             }

@@ -38,3 +38,9 @@ _workspace_*/
 
 # Design prototypes
 prototype/
+
+# CodeGraph local index (regenerate with `codegraph index`)
+.codegraph/
+
+
+CLAUDE.md

@@ -27,6 +27,15 @@ class ToolPaletteView(
 
     var callback: ToolPaletteCallback? = null
 
+    /**
+     * 画布刷新请求回调。
+     *
+     * ToolPaletteView 和 DrawingCanvasView 是独立 TYPE_APPLICATION_OVERLAY 窗口，
+     * 没有共同 parent，因此 [postInvalidateViews] 的 parent 遍历永远找不到 DrawingCanvasView。
+     * 通过此回调，由 OverlayService 直接连接到 drawingCanvas.safeInvalidate()。
+     */
+    var onInvalidateCanvasRequest: (() -> Unit)? = null
+
     private val toolButtons = mutableMapOf<DrawTool, FrameLayout>()
     private var activeToolBtn: FrameLayout? = null
     private val colorButtons = mutableMapOf<Int, FrameLayout>()
@@ -350,7 +359,12 @@ class ToolPaletteView(
     }
 
     private fun postInvalidateViews() {
-        // 尝试刷新画布
+        // 优先通过回调通知画布刷新（跨窗口场景）
+        onInvalidateCanvasRequest?.let {
+            it()
+            return
+        }
+        // 备用：尝试通过 parent 遍历（同窗口场景）
         var p = parent
         while (p != null) {
             if (p is FrameLayout) {

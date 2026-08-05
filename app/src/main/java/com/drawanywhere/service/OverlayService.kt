@@ -87,10 +87,20 @@ class OverlayService : Service() {
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {}
-        hideOverlay()
+        // 移除浮窗按钮（同窗口，直接安全移除）
         hideFloatingButton()
-        stopSelf()
-        android.os.Process.killProcess(android.os.Process.myPid())
+        // 移除画板和工具栏窗口（ZUI 兼容：委托到画布窗口的主线程）
+        if (drawingCanvas != null) {
+            drawingCanvas?.runOnMain {
+                hideOverlay()
+                stopSelf()
+                android.os.Process.killProcess(android.os.Process.myPid())
+            }
+        } else {
+            // drawingCanvas 为空（如未 showOverlay 直接退出），直接停止
+            stopSelf()
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
     }
 
     // ===== 悬浮按钮 =====
@@ -180,12 +190,25 @@ class OverlayService : Service() {
 
         // ===== 窗口2: 工具栏（永远可点击） =====
         val palette = ToolPaletteView(this, engine).apply {
+            onInvalidateCanvasRequest = {
+                drawingCanvas?.safeInvalidate()
+            }
             callback = object : ToolPaletteCallback {
-                override fun onCloseClicked() { hideOverlay() }
-                override fun onSaveClicked() { saveScreenshot() }
+                override fun onCloseClicked() {
+                    // ZUI 多窗口兼容：跨窗口 removeView 委托到画布窗口的主线程
+                    drawingCanvas?.runOnMain { hideOverlay() }
+                }
+                override fun onSaveClicked() {
+                    // ZUI 多窗口兼容：view.draw() 在画布窗口的主线程渲染
+                    drawingCanvas?.runOnMain { saveScreenshot() }
+                }
                 override fun onModeToggleClicked() { toggleMode() }
-                override fun onUndoClicked() { engine.undo(); drawingCanvas?.safeInvalidate() }
-                override fun onClearClicked() { engine.clear(); drawingCanvas?.safeInvalidate() }
+                override fun onUndoClicked() {
+                    drawingCanvas?.runOnMain { engine.undo() }
+                }
+                override fun onClearClicked() {
+                    drawingCanvas?.runOnMain { engine.clear() }
+                }
                 override fun onExitClicked() { exitApp() }
             }
         }
@@ -243,26 +266,26 @@ class OverlayService : Service() {
 
         isDrawMode = !isDrawMode
 
-        // 更新画布模式
-        drawingCanvas?.isDrawMode = isDrawMode
-
-        // 更新工具栏按钮文字
+        // 更新工具栏按钮文字和悬浮按钮（在当前线程，工具栏同窗口，安全）
         toolPalette?.updateModeButton(isDrawMode)
-
-        // 更新悬浮按钮指示点
         floatingButton?.setModeIndicator(isDrawMode)
 
-        // 仅修改画布窗口的触摸拦截（工具栏窗口始终保持可点击）
-        overlayContainer?.let { container ->
-            overlayParams?.let { params ->
-                if (isDrawMode) {
-                    params.flags = params.flags and android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                } else {
-                    params.flags = params.flags or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        // 画布窗口操作委托到主线程（ZUI 双窗口兼容）
+        drawingCanvas?.runOnMain {
+            drawingCanvas?.isDrawMode = isDrawMode
+
+            // 仅修改画布窗口的触摸拦截（工具栏窗口始终保持可点击）
+            overlayContainer?.let { container ->
+                overlayParams?.let { params ->
+                    if (isDrawMode) {
+                        params.flags = params.flags and android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                    } else {
+                        params.flags = params.flags or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    }
+                    try {
+                        windowManager.updateViewLayout(container, params)
+                    } catch (_: Exception) {}
                 }
-                try {
-                    windowManager.updateViewLayout(container, params)
-                } catch (_: Exception) {}
             }
         }
 
