@@ -11,8 +11,8 @@ android {
         applicationId = "com.drawanywhere"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.0.16"
+        versionCode = 19
+        versionName = "1.0.19"
     }
 
     buildFeatures {
