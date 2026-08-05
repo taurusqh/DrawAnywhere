@@ -136,6 +136,7 @@ jobs:
 
             ### 其他
             - 升级包页面 URL 显示，支持点击打开浏览器下载
-            - 构建产物只包含 APK 文件，文件名包含版本号
           files: ./apk/*.apk
           fail_on_unmatched_files: false
+          generate_release_notes: false
+          make_latest: true
